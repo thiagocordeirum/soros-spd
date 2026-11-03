@@ -7,7 +7,7 @@ HTTP), derruba nós de propósito e mede:
 2. Dados iguais: com vários nós gravando ao mesmo tempo, quanto demora para
    todos terem o mesmo conjunto de eventos (mesmo resumo)?
 3. Nada se perde: todo caso enviado aparece em todos os nós uma vez só, mesmo
-   quando o navegador reenvia o mesmo caso?
+   quando o cliente reenvia o mesmo caso?
 4. Velocidade: quanto o cálculo de postos críticos ganha com mais processos?
 """
 from __future__ import annotations
@@ -110,7 +110,7 @@ def avaliar(args) -> None:
         ids = [uuid.uuid4().hex for _ in range(10)]
         for cid in ids:
             _caso(cli[alvo.id], cid)
-            _caso(cli[alvo.id], cid)  # o mesmo caso de novo, como num reenvio do navegador
+            _caso(cli[alvo.id], cid)  # o mesmo caso de novo, como num reenvio do cliente
         enviados += len(ids)
         _esperar_convergencia(rede, list(rede.unidades))
         casos_por_no = {u.id: obter(u.url + "/api/contagem")["casos"] for u in rede.unidades.values()}

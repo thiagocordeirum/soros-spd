@@ -5,7 +5,7 @@ As contas são eventos do diário como qualquer outro (``usuario`` ao criar,
 sincronização. Assim, cada nó confere o login sozinho, mesmo sem falar com a
 secretaria. A senha nunca é guardada: só o sal e o resultado do PBKDF2.
 
-O cidadão que procura soro não tem conta: a tela dele e as rotas que ela usa
+O cidadão que procura soro não tem conta: as rotas de consulta pública
 são abertas.
 """
 from __future__ import annotations

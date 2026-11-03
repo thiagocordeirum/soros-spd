@@ -1,4 +1,4 @@
-"""Servidor HTTP de um nó com FastAPI: API em JSON, páginas web e pontos de sincronização.
+"""Servidor HTTP de um nó com FastAPI: API em JSON e pontos de sincronização.
 
 As rotas são funções comuns (``def``, não ``async``): o FastAPI roda cada
 requisição numa thread do seu pool, então vários profissionais podem usar o
@@ -9,37 +9,29 @@ mesmo frasco. A documentação interativa da API fica em ``/docs`` de cada nó.
 Login: a pessoa da equipe entra no nó da sua unidade e recebe um cookie de
 sessão (um por nó, porque todos rodam em 127.0.0.1). As rotas da equipe exigem
 sessão e, quando mudam algo, que o tipo da conta permita a ação (ver
-``usuarios.py``). Ficam abertas a troca entre nós (``/sync``), a tela do
-cidadão, ``/api/info`` e os contadores da sincronização, que não têm dado de
+``usuarios.py``). Ficam abertas a troca entre nós (``/sync``), a consulta pública
+de soro, ``/api/info`` e os contadores da sincronização, que não têm dado de
 pessoa nenhuma.
 """
 from __future__ import annotations
 
-import mimetypes
 import secrets
 import threading
 import time
 import traceback
-from pathlib import Path
 
 import uvicorn
 from fastapi import APIRouter, Depends, FastAPI, Path as Caminho, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from .no import ErroNegocio, No
 from .sincronizacao import Sincronizador
 from .usuarios import ACOES, TIPOS, pode
 
-PASTA_WEB = Path(__file__).parent / "web"
-mimetypes.add_type("application/manifest+json", ".webmanifest")
-mimetypes.add_type("text/javascript", ".js")
-
-
 # --- corpos das requisições ---------------------------------------------------
-# Os campos seguem o que as telas enviam. As regras de negócio (quantidade
+# Os campos definem os dados recebidos pela API. As regras de negócio (quantidade
 # positiva, lote existente, espaço na geladeira) continuam em no.py.
 
 class TrocaSync(BaseModel):
@@ -66,7 +58,7 @@ class Perda(BaseModel):
 
 
 class Caso(BaseModel):
-    id: str | None = Field(None, description="gerado pelo navegador; reenviar o mesmo id não duplica o caso")
+    id: str | None = Field(None, description="gerado pelo cliente; reenviar o mesmo id não duplica o caso")
     agravo: str = Field(examples=["botropico"])
     gravidade: str = Field("moderado", examples=["leve", "moderado", "grave"])
     ampolas: int = 0
@@ -151,7 +143,7 @@ def criar_app(no: No, sync: Sincronizador) -> FastAPI:
     app = FastAPI(title=f"Soro · {no.u.nome}", version="0.3",
                   description=f"API do nó {no.u.id} ({no.u.nivel}) da rede de soros de {no.rede.estado}.")
 
-    # --- erros no formato que as telas esperam: {"erro": "..."} -----------------
+    # --- erros da API no formato {"erro": "..."} -----------------------------
     @app.exception_handler(ErroNegocio)
     def erro_negocio(_: Request, e: ErroNegocio):
         return JSONResponse({"erro": str(e)}, status_code=409)
@@ -178,8 +170,7 @@ def criar_app(no: No, sync: Sincronizador) -> FastAPI:
         traceback.print_exc()
         return JSONResponse({"erro": f"erro interno: {e}"}, status_code=500)
 
-    # O estoque muda a todo momento: nada de cache no navegador (o service worker
-    # da tela do cidadão guarda o que precisa por conta própria).
+    # O estoque muda a todo momento: as respostas não devem ser armazenadas em cache.
     @app.middleware("http")
     async def sem_cache(request: Request, chamar):
         resposta = await chamar(request)
@@ -346,7 +337,7 @@ def criar_app(no: No, sync: Sincronizador) -> FastAPI:
     # --- contas da equipe -------------------------------------------------------
     r = APIRouter(prefix="/api", tags=["contas"])
 
-    @r.get("/sessao", summary="Quem está usando este navegador e o que pode fazer")
+    @r.get("/sessao", summary="Conta da sessão atual e suas permissões")
     def api_sessao(request: Request):
         conta = conta_da_sessao(request)
         return {"usuario": no.publico(conta) if conta else None,
@@ -419,8 +410,6 @@ def criar_app(no: No, sync: Sincronizador) -> FastAPI:
 
     app.include_router(r)
 
-    # Páginas: por último, para não esconder as rotas da API.
-    app.mount("/", StaticFiles(directory=PASTA_WEB, html=True), name="paginas")
     return app
 
 

@@ -2,7 +2,7 @@
 
 Toda operação grava eventos no diário local e retorna na hora, sem consultar
 outro nó. O que o nó sabe das outras unidades vem da sincronização e pode estar
-atrasado; por isso as telas mostram há quanto tempo cada dado foi atualizado.
+atrasado; por isso a API informa há quanto tempo cada dado foi atualizado.
 
 Tipos de evento e o que guardam (campo ``dados``):
 
@@ -43,7 +43,7 @@ from .rotas import INF, Mapa, destinos_com_soro, postos_criticos
 
 
 class ErroNegocio(Exception):
-    """Operação recusada por uma regra do sistema; a mensagem vai para a tela."""
+    """Operação recusada por uma regra do sistema; a mensagem é retornada pela API."""
 
 
 class No:
@@ -186,7 +186,7 @@ class No:
                 caso_id: str | None = None, data: str | None = None, por: str | None = None) -> dict:
         """Registra um caso e dá baixa no soro aplicado.
 
-        ``caso_id`` é gerado pelo navegador; se o mesmo caso for enviado de novo
+        ``caso_id`` é gerado pelo cliente; se o mesmo caso for enviado de novo
         (por exemplo, depois de uma falha de rede), o sistema não grava duas vezes.
         """
         if agravo not in self.rede.agravos:
@@ -413,7 +413,7 @@ class No:
                 "alertas": self.alertas_ativos(), "pedidos": self.pedidos_abertos(self.u.id)}
 
     def graficos(self, dias: int = 30, unidade: str | None = None) -> dict:
-        """Séries para os gráficos das telas, sobre as unidades que este nó acompanha (ou uma delas)."""
+        """Séries estatísticas, sobre as unidades que este nó acompanha (ou uma delas)."""
         visiveis = set(self.unidades_visiveis())
         if unidade in visiveis:
             visiveis = {unidade}
@@ -514,7 +514,7 @@ class No:
         return self._visao()["usuarios"].get(login)
 
     def publico(self, conta: dict) -> dict:
-        """Conta sem sal nem hash, para mandar às telas."""
+        """Conta sem sal nem hash, para retornar pela API."""
         return {"login": conta["login"], "nome": conta["nome"], "tipo": conta["tipo"],
                 "tipo_nome": TIPOS[conta["tipo"]]["nome"], "unidade": conta["unidade"],
                 "unidade_nome": self.rede.unidade(conta["unidade"]).nome, "ativo": conta["ativo"],

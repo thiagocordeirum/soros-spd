@@ -4,7 +4,7 @@ Primeiro cria as contas de demonstração (tabela abaixo). Depois tudo entra pel
 API HTTP de cada nó, com login, como faria a equipe: lotes de soro,
 três semanas de atendimentos (com um aumento de casos no Alto Solimões nos
 últimos dias), uma remessa a caminho e um pedido de soro. Os números são
-inventados; servem só para as telas terem o que mostrar.
+inventados; servem para demonstrar as operações da API.
 """
 from __future__ import annotations
 
@@ -153,4 +153,4 @@ def carregar_exemplo(rede, semente: int = 7) -> None:
             cli[u.id].obter("/api/alertas?recalcular=1")
         except (ErroApi, OSError):
             pass
-    print("Pronto. Abra os painéis no navegador.")
+    print("Pronto. Dados de exemplo disponíveis na API.")
