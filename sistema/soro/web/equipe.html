@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Soro · Equipe</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header></header>
+<main>
+  <section class="grade" id="gestao" hidden>
+    <div class="bloco">
+      <h2>Cadastrar pessoa</h2>
+      <form id="f-nova">
+        <label>Nome<input id="n-nome" autocomplete="off" required></label>
+        <div class="campos">
+          <label>Tipo de conta<select id="n-tipo"></select></label>
+          <label>Unidade<select id="n-unidade"></select></label>
+        </div>
+        <div class="campos">
+          <label>Login<input id="n-login" autocapitalize="none" spellcheck="false" placeholder="ex.: maria.silva" required></label>
+          <label>Senha inicial<input id="n-senha" type="text" minlength="8" autocomplete="off" required></label>
+        </div>
+        <p class="leve" id="n-dica"></p>
+        <button class="botao" type="submit">Cadastrar</button>
+      </form>
+    </div>
+    <div class="bloco" id="pessoas">
+      <div class="cab"><h2>Pessoas cadastradas</h2><span class="leve" id="p-total"></span></div>
+      <div class="tabela" id="lista"></div>
+    </div>
+  </section>
+
+  <section class="grade">
+    <div class="bloco">
+      <h2>Trocar senha</h2>
+      <form id="f-senha">
+        <input type="text" autocomplete="username" id="s-login" hidden>
+        <label>Senha atual<input id="s-atual" type="password" autocomplete="current-password" required></label>
+        <label>Nova senha, com pelo menos 8 caracteres<input id="s-nova" type="password" autocomplete="new-password" minlength="8" required></label>
+        <button class="botao" type="submit">Trocar senha</button>
+      </form>
+    </div>
+    <div class="bloco">
+      <h2>O que cada conta pode fazer</h2>
+      <div class="lista" id="tipos"></div>
+    </div>
+  </section>
+</main>
+<script src="app.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const DESCRICAO = {
+  profissional: ["estoque", "", "Registra atendimentos, entradas, perdas e remessas que chegam, e pede soro ao polo."],
+  coordenador: ["caminhao", "ambar", "Tudo do profissional, mais o painel do polo, o envio de remessas e o cadastro dos profissionais da região."],
+  gestor: ["painel", "azul", "Painel do estado, remanejamento, postos críticos e cadastro de qualquer conta."],
+};
+
+async function carregarPessoas() {
+  const pessoas = await App.api("/api/usuarios");
+  const eu = App.sessao.usuario.login;
+  $("h-pessoas-v").textContent = pessoas.filter(p => p.ativo).length;
+  $("p-total").textContent = `${pessoas.filter(p => p.ativo).length} ativas`;
+  $("lista").innerHTML = `<table><tr><th>Pessoa</th><th>Conta</th><th>Situação</th><th></th></tr>
+    ${pessoas.map(p => `<tr><td><b>${App.esc(p.nome)}</b><br><span class="leve">${App.esc(p.login)}</span></td>
+      <td>${App.esc(p.tipo_nome)}<br><span class="leve">${App.esc(p.unidade_nome)}</span></td>
+      <td><span class="etq ${p.ativo ? "ok" : "neutro"}">${p.ativo ? "ativa" : "desativada"}</span></td>
+      <td class="d">${p.login === eu ? '<span class="leve">você</span>'
+        : `<button class="botao sec peq" data-login="${App.esc(p.login)}" data-ativo="${!p.ativo}">${p.ativo ? "Desativar" : "Reativar"}</button>`}</td></tr>`).join("")}</table>`;
+}
+
+function preencherUnidades() {
+  const tipo = $("n-tipo").value, i = App.info, eu = App.sessao.usuario;
+  const minhas = eu.tipo === "gestor" ? null : new Set([i.id, ...i.abastece]);
+  const niveis = App.sessao.tipos[tipo].niveis;
+  $("n-unidade").innerHTML = Object.entries(i.unidades)
+    .filter(([id, u]) => niveis.includes(u.nivel) && (!minhas || minhas.has(id)))
+    .map(([id, u]) => `<option value="${id}">${App.esc(u.nome)}</option>`).join("");
+  mostrarEndereco();
+}
+
+function mostrarEndereco() {
+  const u = App.info.unidades[$("n-unidade").value];
+  $("n-dica").textContent = u ? `A conta chega a ${u.nome} pela sincronização em alguns segundos. A pessoa entra pelo endereço da unidade: ${u.url}` : "";
+}
+
+(async () => {
+  await App.cabecalho("equipe.html");
+  const eu = App.sessao.usuario, gere = App.pode("usuarios");
+  App.hero({rotulo: eu.tipo_nome, titulo: eu.nome, texto: `Você entrou como *${eu.tipo_nome}* em *${eu.unidade_nome}*, com o login *${eu.login}*.`,
+    acoes: gere ? [
+      {icone: "pessoa", rotulo: "Cadastrar pessoa", curto: "Cadastrar", href: "#f-nova"},
+      {icone: "equipe", rotulo: "Pessoas ativas", valor: "-", id: "h-pessoas", href: "#pessoas", cor: "azul"},
+      {icone: "cadeado", rotulo: "Trocar senha", href: "#f-senha", cor: "ambar"},
+      {icone: "sair", rotulo: "Sair", id: "sair", cor: "laranja"},
+    ] : [
+      {icone: "cadeado", rotulo: "Trocar senha", curto: "Senha", href: "#f-senha"},
+      {icone: "sair", rotulo: "Sair", id: "sair", cor: "laranja"},
+    ]});
+  $("s-login").value = eu.login;
+  $("sair").addEventListener("click", async () => {
+    await App.api("/api/sair", {});
+    location.href = "login.html";
+  });
+  $("tipos").innerHTML = Object.entries(App.sessao.tipos).map(([k, t]) => {
+    const [ic, cor, txt] = DESCRICAO[k];
+    return `<div class="item"><span class="ic ${cor}">${App.icone(ic)}</span><p><b>${App.esc(t.nome)}</b><br><span class="leve">${txt}</span></p></div>`;
+  }).join("") + `<div class="item"><span class="ic laranja">${App.icone("pin")}</span><p><b>Cidadão</b><br><span class="leve">Não tem conta. A tela "Onde tem soro" é aberta e o perfil dele fica só no celular.</span></p></div>`;
+
+  $("f-senha").addEventListener("submit", async e => {
+    e.preventDefault();
+    try {
+      await App.api("/api/senha", {atual: $("s-atual").value, nova: $("s-nova").value});
+      e.target.reset();
+      App.aviso("Senha trocada. A nova senha chega às outras unidades pela sincronização.");
+    } catch (erro) { App.aviso(erro.message, true); }
+  });
+
+  if (!gere) return;
+  $("gestao").hidden = false;
+  const tipos = eu.tipo === "gestor" ? Object.keys(App.sessao.tipos) : ["profissional"];
+  $("n-tipo").innerHTML = tipos.map(t => `<option value="${t}">${App.esc(App.sessao.tipos[t].nome)}</option>`).join("");
+  $("n-tipo").addEventListener("change", preencherUnidades);
+  $("n-unidade").addEventListener("change", mostrarEndereco);
+  preencherUnidades();
+  $("f-nova").addEventListener("submit", async e => {
+    e.preventDefault();
+    try {
+      const p = await App.api("/api/usuarios", {nome: $("n-nome").value, tipo: $("n-tipo").value, unidade: $("n-unidade").value,
+                                               login: $("n-login").value, senha: $("n-senha").value});
+      App.aviso(`Conta ${p.login} criada para ${p.nome}.`);
+      ["n-nome", "n-login", "n-senha"].forEach(id => ($(id).value = ""));
+      carregarPessoas();
+    } catch (erro) { App.aviso(erro.message, true); }
+  });
+  $("lista").addEventListener("click", async e => {
+    const b = e.target.closest("button[data-login]");
+    if (!b) return;
+    try {
+      await App.api(`/api/usuarios/${encodeURIComponent(b.dataset.login)}/situacao`, {ativo: b.dataset.ativo === "true"});
+      carregarPessoas();
+    } catch (erro) { App.aviso(erro.message, true); }
+  });
+  await carregarPessoas();
+})().catch(e => App.aviso(e.message, true));
+</script>
+</body>
+</html>

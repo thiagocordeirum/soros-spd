@@ -17,7 +17,6 @@
 <style>
 main{gap:16px}
 main>*,.hero{max-width:1100px}
-.hero-botao.emergencia{color:#B3261E}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 .animais label.atalho{flex-basis:170px}
 .animais input{position:absolute;opacity:0;width:1px;height:1px}
@@ -90,6 +89,8 @@ details.socorro ul{margin:8px 0 0;padding-left:20px;display:flex;flex-direction:
   <section class="saida" data-aba="lista">
     <div id="painel-lista">
       <div class="bloco" id="resultado"><p class="vazio">Escolha o animal e diga onde você está.</p></div>
+      <a class="item" href="perfil.html" id="lembrete-perfil"><span class="ic azul" data-ic="pessoa"></span>
+        <p><b id="lembrete-titulo">Crie seu perfil (opcional)</b><br><span class="leve" id="lembrete-txt">Alergias, se já tomou soro e um contato de emergência, para mostrar à equipe. Fica só neste celular.</span></p></a>
       <details class="bloco socorro" id="socorro">
         <summary><span class="ic laranja" id="ic-socorro"></span>O que fazer até chegar ao atendimento</summary>
         <ul>
@@ -106,6 +107,7 @@ details.socorro ul{margin:8px 0 0;padding-left:20px;display:flex;flex-direction:
     <div class="bloco" id="painel-mapa"><div id="mapa" class="grafico"></div>
       <p class="leve" id="legenda-mapa"></p></div>
   </section>
+  <p class="leve" style="text-align:center">É da equipe de saúde? <a href="login.html" style="color:var(--verde-escuro);font-weight:700">Entrar</a></p>
 </main>
 <nav class="nav cidadao-nav" aria-label="Atalhos">
   <button type="button" data-ir="topo"><span data-ic="busca"></span>Buscar</button>
@@ -324,6 +326,13 @@ function trocarAba(aba) {
       () => { $("gps-txt").textContent = "Usar minha localização"; App.aviso("Não foi possível pegar a localização. Escolha na lista ou toque no mapa.", true); },
       {timeout: 10000, enableHighAccuracy: true});
   });
+  try {
+    const perfil = JSON.parse(localStorage.getItem("soro-perfil"));
+    if (perfil) {
+      $("lembrete-titulo").textContent = "Mostre seu perfil à equipe";
+      $("lembrete-txt").textContent = "Ao chegar, abra o perfil e mostre a tela: alergias, soro tomado antes e contato de emergência.";
+    }
+  } catch (e) {}
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 })().catch(e => App.aviso(e.message, true));
 </script>

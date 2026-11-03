@@ -1,7 +1,7 @@
 // Service worker da tela do cidadão. Guarda a página e as últimas respostas da API para
 // a tela abrir mesmo sem conexão. Sempre tenta a rede primeiro, porque o estoque muda.
-const CACHE = "soro-cidadao-v1";
-const PAGINA = ["usuario.html", "app.css", "app.js", "icone.svg", "manifest.webmanifest"];
+const CACHE = "soro-cidadao-v2";
+const PAGINA = ["usuario.html", "perfil.html", "app.css", "app.js", "icone.svg", "manifest.webmanifest"];
 const API = ["/api/info", "/api/localidades", "/api/onde-tem-soro"];
 
 self.addEventListener("install", e => {

@@ -40,6 +40,8 @@ comunidades são ilustrativos.
 | RF13 | O cidadão vê o caminho até o lugar mais rápido de alcançar que tem o soro, informando onde está pela lista, pela posição do celular ou tocando no mapa; a tela funciona no celular e pode ser instalada | `rotas.py`, `usuario.html`, `sw.js` |
 | RF14 | Cálculo de postos críticos em paralelo | `rotas.postos_criticos` |
 | RF15 | Gráficos de uso diário, atendimentos por tipo de acidente, vencimento por mês, duração do estoque e estoque contra o alvo | `No.graficos`, `app.js` |
+| RF16 | Contas da equipe em três tipos (profissional de saúde, coordenação do polo, gestão estadual), cada um com suas permissões; login no nó da própria unidade, sem consultar outro nó; cada registro guarda quem o fez | `usuarios.py`, `No.cadastrar`, `No.autenticar`, `servidor.py` |
+| RF17 | O cidadão não tem conta; pode guardar no próprio celular um perfil opcional para mostrar à equipe | `perfil.html` |
 
 Ficam para depois: cadastro de unidades por tela, login e permissões, relatórios,
 exportação para os sistemas oficiais e desenho dos trechos seguindo o curso dos rios.
@@ -58,6 +60,7 @@ exportação para os sistemas oficiais e desenho dos trechos seguindo o curso do
 | RNF08 | O cálculo pesado ganha velocidade com mais processadores | `ProcessPoolExecutor` (seção 9) |
 | RNF09 | Privacidade: nenhum dado que identifique o paciente | o atendimento guarda só data, animal, gravidade, soro, ampolas e local |
 | RNF10 | O mesmo código serve para qualquer estado | toda a rede vem do arquivo de configuração |
+| RNF11 | Segurança das contas: a senha não é guardada nem trafega entre nós | só sal e hash PBKDF2-SHA256 (200 mil iterações); sessão em cookie HttpOnly e SameSite=Strict, um por nó; login errado demora 0,4 s |
 
 ### 2.3 Regras de negócio
 
@@ -73,6 +76,9 @@ exportação para os sistemas oficiais e desenho dos trechos seguindo o curso do
 | RN08 | A busca do cidadão só mostra lugares com pelo menos 4 ampolas do soro (configurável) |
 | RN09 | Destinos a mais de 6 horas aparecem marcados (configurável) |
 | RN10 | O sistema não sugere dose nem conduta; quem aplica informa as ampolas |
+| RN11 | Só a secretaria cria a primeira conta, de gestão, e só enquanto a rede não tem nenhuma |
+| RN12 | A gestão cadastra qualquer conta; a coordenação cadastra só profissionais do seu polo e dos postos que ele abastece |
+| RN13 | Gestão estadual só existe na secretaria, coordenação só em polo, profissional em polo ou posto |
 
 ## 3. Arquitetura
 
@@ -142,7 +148,7 @@ Tudo é um evento imutável no diário (`diario.py`). Cada evento tem:
 |---|---|
 | `origem` | unidade que criou o evento |
 | `seq` | número de sequência dentro da origem: 1, 2, 3... |
-| `tipo` | `mov`, `caso`, `remessa`, `receb`, `pedido` ou `alerta` |
+| `tipo` | `mov`, `caso`, `remessa`, `receb`, `pedido`, `alerta`, `usuario` ou `usuario_alt` |
 | `chave` | identificador de domínio (id do caso, da remessa, do alerta ou `unidade/lote`) |
 | `dados` | conteúdo em JSON |
 | `quando` | horário de criação, só para exibição |
@@ -157,13 +163,21 @@ Tipos de evento:
 | `receb` | quem recebe | remessa, destino, qtd, divergência |
 | `pedido` | quem pede | id, unidade, para, soro, qtd |
 | `alerta` | polo ou secretaria | id, região, dia, observado, média, limiar, por |
+| `usuario` | quem cadastra | login, nome, tipo, unidade, sal, hash, iter, criado_por, data |
+| `usuario_alt` | quem desativa, reativa ou troca a senha | id, login, em (hora), ativo ou sal, hash, iter |
+
+`mov`, `caso`, `remessa`, `receb` e `pedido` levam também `por`, o login de quem fez.
 
 O estado que as telas mostram é calculado a partir dos eventos:
 
 * saldo de um lote numa unidade = soma de `qtd` dos `mov` daquela unidade e lote;
 * em trânsito = remessas sem `receb` correspondente;
 * uso por mês = soma das saídas por dispensa nos últimos 90 dias, vezes 30/90;
-* casos, pedidos e alertas = conjunto de eventos daquele tipo, sem repetição de `chave`.
+* casos, pedidos e alertas = conjunto de eventos daquele tipo, sem repetição de `chave`;
+* contas = o primeiro `usuario` de cada login na ordem do diário, com os `usuario_alt`
+  aplicados em ordem de `em` (e de `id` no empate). Todos os nós ordenam do mesmo jeito,
+  então chegam à mesma situação; com relógios desacertados, duas mudanças quase
+  simultâneas na mesma conta podem ficar na ordem errada, o que só afeta qual delas vale.
 
 Somas e uniões não dependem da ordem em que os eventos chegam. Esse é o ponto que garante
 que todos os nós calculam o mesmo estado quando têm os mesmos eventos.
@@ -343,6 +357,29 @@ mostra o estoque de cada posto ao lado do estoque-alvo. Cada soro tem uma cor fi
 tipo de acidente usa a cor do seu soro principal. As quatro cores foram conferidas para
 daltonismo nos temas claro e escuro. Todo gráfico tem uma tabela com os mesmos números
 ("Ver os números") e mostra o valor ao passar o mouse ou focar com o teclado.
+
+### 7.7 Contas e permissões
+
+A pessoa entra pelo nó da sua unidade. O nó confere a senha com o hash que recebeu pela
+sincronização e abre uma sessão na memória (12 horas), entregue num cookie com o nome do
+nó, porque todos os nós de teste rodam em 127.0.0.1 e o navegador não separa cookies por
+porta. As rotas da equipe exigem sessão e, para mudar algo, a permissão do tipo da conta:
+
+| Ação | Profissional | Coordenação | Gestão |
+|---|---|---|---|
+| ver estoque, casos, remessas, alertas, gráficos | sim | sim | sim |
+| registrar atendimento, entrada, perda, recebimento, pedido | sim | sim | sim |
+| enviar remessa | | sim | sim |
+| painel, sugestões de reposição, postos críticos | | sim | sim |
+| cadastrar e desativar contas | | da sua região | todas |
+
+Ficam abertas a troca entre nós (`/sync`), `/api/info`, os contadores da sincronização e
+as rotas da tela do cidadão. Sem sessão a resposta é 401 e a tela leva ao login; sem
+permissão, 403. A conta criada na secretaria só vale num posto depois de chegar a ele pela
+sincronização, o que leva alguns segundos; desativar uma conta também se espalha assim.
+
+O cidadão não tem conta. O perfil opcional dele (`perfil.html`) fica no `localStorage` do
+celular e nunca é enviado a um nó.
 
 ## 8. Persistência
 

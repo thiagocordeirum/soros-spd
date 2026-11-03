@@ -21,8 +21,21 @@ Com o ambiente ativado:
 
 ```bash
 python -m soro rede         # sobe os 8 nós do exemplo do Amazonas, um processo por nó
-python -m soro exemplo      # em outro terminal: carrega dados de exemplo
+python -m soro exemplo      # em outro terminal: carrega dados de exemplo e cria as contas
 ```
+
+As telas da equipe pedem login. O `exemplo` cria contas de demonstração, todas com a senha
+que está em `SENHA_EXEMPLO`, no arquivo `soro/exemplo.py`. Cada pessoa entra pelo endereço
+da própria unidade:
+
+| Login | Tipo | Entra em |
+|---|---|---|
+| `gestor` | Gestão estadual | http://127.0.0.1:8000 |
+| `coord.tabatinga`, `coord.tefe` | Coordenação do polo | 8001, 8005 |
+| `prof.<unidade>` (ex.: `prof.atalaia`) | Profissional de saúde | porta da unidade (Atalaia: 8003) |
+
+Numa rede sem nenhuma conta, a tela de login da secretaria pede a criação da primeira conta
+de gestão; as outras são cadastradas na tela Equipe.
 
 Depois abra no navegador:
 
@@ -55,11 +68,14 @@ com `python -m soro no tabatinga` e veja na tela "Rede" os dados se acertarem.
 
 | Tela | Quem usa | O que faz |
 |---|---|---|
-| Início | todos | resumo do nó e alertas ativos |
+| Entrar (`login.html`) | equipe | login; na secretaria, criação da primeira conta |
+| Início | toda a equipe | resumo do nó e alertas ativos |
 | Estoque e atendimento (`posto.html`) | profissional do posto ou do polo | lotes com validade, registro de atendimento com baixa no lote que vence antes, confirmação de remessa, pedido de soro, entrada de lote |
 | Painel do polo (`polo.html`) | responsável do polo | sugestão de reposição para cada posto, estoque dos postos contra o alvo, pedidos, remessas a caminho, gráficos de casos, uso e vencimento |
 | Painel estadual (`estado.html`) | secretaria | estoque de cada unidade, uso por mês, gráfico de por quantos meses dura, idade do dado, soro perto de vencer com sugestão de remanejamento, postos críticos, gráficos de uso, atendimentos e vencimento |
-| Onde tem soro (`usuario.html`) | cidadão, no celular | posto mais rápido de alcançar que tem o soro, com o caminho (barco, voadeira, estrada, avião) no mapa; a pessoa diz onde está pela lista, pelo GPS ou tocando no mapa; pode ser instalada na tela inicial |
+| Equipe (`equipe.html`) | toda a equipe | troca de senha e saída; para gestão e coordenação, cadastro, desativação e lista das contas |
+| Seu perfil (`perfil.html`) | cidadão, opcional | nome, alergias, se já tomou soro, doenças e contato de emergência, guardados só no celular para mostrar à equipe |
+| Onde tem soro (`usuario.html`) | cidadão, no celular, sem login | posto mais rápido de alcançar que tem o soro, com o caminho (barco, voadeira, estrada, avião) no mapa; a pessoa diz onde está pela lista, pelo GPS ou tocando no mapa; pode ser instalada na tela inicial |
 | Rede (`rede.html`) | equipe técnica | vizinhos, última troca, vetor de versões e resumo dos dados |
 
 ## O sistema usa alguma API externa?
@@ -119,6 +135,8 @@ redes/amazonas.cnes.json  dados dos estabelecimentos baixados do CNES
 soro/config.py          leitura e validação do arquivo da rede
 soro/diario.py          diário de eventos em SQLite, vetor de versões
 soro/no.py              regras de negócio de uma unidade
+soro/usuarios.py        tipos de conta, permissões e senha (PBKDF2)
+soro/cliente.py         cliente HTTP com login, usado pelo exemplo, pela avaliação e pelos testes
 soro/sincronizacao.py   troca de dados entre vizinhos (gossip)
 soro/servidor.py        servidor HTTP em FastAPI: API, páginas e sincronização
 soro/surto.py           detecção de surto (método C2)

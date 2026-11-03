@@ -23,17 +23,17 @@ from argparse import Namespace
 from pathlib import Path
 
 from .__main__ import carregar_rede, esperar_no, iniciar_processo
-from .exemplo import obter
+from .cliente import Cliente, ErroApi
+from .exemplo import SENHA_EXEMPLO, criar_contas, obter, operador
 from .rotas import medir_speedup
-from .sincronizacao import postar
 
 
-def _caso(url: str, cid: str | None = None) -> int:
+def _caso(cliente: Cliente, cid: str | None = None) -> int:
     corpo = {"id": cid or uuid.uuid4().hex, "agravo": "escorpionico", "gravidade": "leve", "ampolas": 0}
     try:
-        postar(url + "/api/casos", corpo)
+        cliente.postar("/api/casos", corpo)
         return 1
-    except (urllib.error.URLError, OSError):
+    except (ErroApi, urllib.error.URLError, OSError):
         return 0
 
 
@@ -70,6 +70,8 @@ def avaliar(args) -> None:
             procs[uid] = iniciar_processo(uid, cfg)
         for u in rede.unidades.values():
             esperar_no(u.url)
+        print("Criando as contas da equipe e esperando chegarem a todos os nós...")
+        cli = criar_contas(rede)
         enviados = 0
 
         # 1. Falha de um nó -------------------------------------------------
@@ -78,11 +80,12 @@ def avaliar(args) -> None:
         print(f"\n[1] Derrubando {polo.nome} e registrando casos nos postos dele...")
         procs[polo.id].terminate()
         procs[polo.id].wait()
-        aceitos = sum(_caso(p.url) for p in postos for _ in range(10))
+        aceitos = sum(_caso(cli[p.id]) for p in postos for _ in range(10))
         enviados += 10 * len(postos)
         print(f"    aceitos com o polo fora do ar: {aceitos} de {10 * len(postos)}")
         procs[polo.id] = iniciar_processo(polo.id, cfg)
         esperar_no(polo.url)
+        cli[polo.id].entrar(operador(polo), SENHA_EXEMPLO)  # sessões ficam na memória do nó
         t = _esperar_convergencia(rede, list(rede.unidades))
         print(f"    polo de volta; todos os nós iguais depois de {t:.2f} s" if t else "    não convergiu no tempo-limite")
         resultados["falha_de_no"] = {"polo": polo.id, "casos_enviados": 10 * len(postos),
@@ -91,7 +94,7 @@ def avaliar(args) -> None:
         # 2. Dados iguais ----------------------------------------------------
         print("\n[2] Todos os nós registrando ao mesmo tempo...")
         por_no = 20
-        threads = [threading.Thread(target=lambda u=u: [_caso(u.url) for _ in range(por_no)])
+        threads = [threading.Thread(target=lambda u=u: [_caso(cli[u.id]) for _ in range(por_no)])
                    for u in rede.unidades.values()]
         [th.start() for th in threads]
         [th.join() for th in threads]
@@ -106,8 +109,8 @@ def avaliar(args) -> None:
         alvo = postos[0]
         ids = [uuid.uuid4().hex for _ in range(10)]
         for cid in ids:
-            _caso(alvo.url, cid)
-            _caso(alvo.url, cid)  # o mesmo caso de novo, como num reenvio do navegador
+            _caso(cli[alvo.id], cid)
+            _caso(cli[alvo.id], cid)  # o mesmo caso de novo, como num reenvio do navegador
         enviados += len(ids)
         _esperar_convergencia(rede, list(rede.unidades))
         casos_por_no = {u.id: obter(u.url + "/api/contagem")["casos"] for u in rede.unidades.values()}

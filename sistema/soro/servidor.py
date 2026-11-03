@@ -5,17 +5,25 @@ requisição numa thread do seu pool, então vários profissionais podem usar o
 mesmo nó ao mesmo tempo. As operações que leem e depois gravam o estoque passam
 pela trava do nó (ver ``no.py``), para que duas saídas simultâneas não usem o
 mesmo frasco. A documentação interativa da API fica em ``/docs`` de cada nó.
+
+Login: a pessoa da equipe entra no nó da sua unidade e recebe um cookie de
+sessão (um por nó, porque todos rodam em 127.0.0.1). As rotas da equipe exigem
+sessão e, quando mudam algo, que o tipo da conta permita a ação (ver
+``usuarios.py``). Ficam abertas a troca entre nós (``/sync``), a tela do
+cidadão, ``/api/info`` e os contadores da sincronização, que não têm dado de
+pessoa nenhuma.
 """
 from __future__ import annotations
 
 import mimetypes
+import secrets
 import threading
 import time
 import traceback
 from pathlib import Path
 
 import uvicorn
-from fastapi import APIRouter, FastAPI, Path as Caminho, Query, Request, Response
+from fastapi import APIRouter, Depends, FastAPI, Path as Caminho, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -23,6 +31,7 @@ from pydantic import BaseModel, Field
 
 from .no import ErroNegocio, No
 from .sincronizacao import Sincronizador
+from .usuarios import ACOES, TIPOS, pode
 
 PASTA_WEB = Path(__file__).parent / "web"
 mimetypes.add_type("application/manifest+json", ".webmanifest")
@@ -81,6 +90,63 @@ class Pedido(BaseModel):
     qtd: int
 
 
+class Entrar(BaseModel):
+    login: str
+    senha: str
+
+
+class NovaConta(BaseModel):
+    login: str = Field(examples=["prof.atalaia"])
+    nome: str
+    tipo: str = Field(examples=list(TIPOS))
+    unidade: str
+    senha: str
+
+
+class Situacao(BaseModel):
+    ativo: bool
+
+
+class TrocaSenha(BaseModel):
+    atual: str
+    nova: str
+
+
+class SemSessao(Exception):
+    pass
+
+
+class SemPermissao(Exception):
+    pass
+
+
+class Sessoes:
+    """Sessões abertas neste nó. Ficam só na memória: se o nó reiniciar, a pessoa entra de novo."""
+    DURACAO_S = 12 * 3600
+
+    def __init__(self):
+        self._abertas: dict[str, tuple[str, float]] = {}
+        self._trava = threading.Lock()
+
+    def abrir(self, login: str) -> str:
+        token = secrets.token_urlsafe(32)
+        with self._trava:
+            self._abertas[token] = (login, time.time() + self.DURACAO_S)
+        return token
+
+    def login(self, token: str | None) -> str | None:
+        with self._trava:
+            login, expira = self._abertas.get(token or "", (None, 0))
+            if login and expira < time.time():
+                del self._abertas[token]
+                return None
+            return login
+
+    def fechar(self, token: str | None) -> None:
+        with self._trava:
+            self._abertas.pop(token or "", None)
+
+
 def criar_app(no: No, sync: Sincronizador) -> FastAPI:
     app = FastAPI(title=f"Soro · {no.u.nome}", version="0.3",
                   description=f"API do nó {no.u.id} ({no.u.nivel}) da rede de soros de {no.rede.estado}.")
@@ -89,6 +155,14 @@ def criar_app(no: No, sync: Sincronizador) -> FastAPI:
     @app.exception_handler(ErroNegocio)
     def erro_negocio(_: Request, e: ErroNegocio):
         return JSONResponse({"erro": str(e)}, status_code=409)
+
+    @app.exception_handler(SemSessao)
+    def sem_sessao(_: Request, e: SemSessao):
+        return JSONResponse({"erro": str(e)}, status_code=401)
+
+    @app.exception_handler(SemPermissao)
+    def sem_permissao(_: Request, e: SemPermissao):
+        return JSONResponse({"erro": str(e)}, status_code=403)
 
     @app.exception_handler(KeyError)
     def nao_encontrado(_: Request, e: KeyError):
@@ -111,6 +185,30 @@ def criar_app(no: No, sync: Sincronizador) -> FastAPI:
         resposta = await chamar(request)
         resposta.headers["Cache-Control"] = "no-store"
         return resposta
+
+    # --- quem está usando ------------------------------------------------------
+    sessoes = Sessoes()
+    COOKIE = f"soro_{no.u.id}"
+
+    def conta_da_sessao(request: Request) -> dict | None:
+        login = sessoes.login(request.cookies.get(COOKIE))
+        conta = no.usuario(login) if login else None
+        return conta if conta and conta["ativo"] and conta["unidade"] == no.u.id else None
+
+    def pessoa(request: Request) -> dict:
+        conta = conta_da_sessao(request)
+        if conta is None:
+            raise SemSessao("Entre com seu login e senha")
+        return conta
+
+    def exigir(acao: str):
+        def verificar(conta: dict = Depends(pessoa)) -> dict:
+            if not pode(conta, acao):
+                raise SemPermissao(f"Sua conta ({TIPOS[conta['tipo']]['nome']}) não pode {ACOES[acao]}")
+            return conta
+        return verificar
+
+    LOGADO = [Depends(pessoa)]
 
     # --- sincronização -------------------------------------------------------
     r = APIRouter(tags=["sincronização"])
@@ -139,7 +237,7 @@ def criar_app(no: No, sync: Sincronizador) -> FastAPI:
         return {"eventos": no.diario.total(), "casos": len(v["casos"]),
                 "remessas": len(v["remessas"]), "pedidos": len(v["pedidos"]), "alertas": len(v["alertas"])}
 
-    @r.post("/api/sincronizar", summary="Força uma troca com cada vizinho agora")
+    @r.post("/api/sincronizar", summary="Força uma troca com cada vizinho agora", dependencies=LOGADO)
     def api_sincronizar():
         return {"resultado": {v: sync.trocar(v) for v in sync.vizinhos}}
 
@@ -152,7 +250,8 @@ def criar_app(no: No, sync: Sincronizador) -> FastAPI:
     def api_info():
         return no.info()
 
-    @r.get("/estoque", summary="Lotes, total, capacidade, espaço livre e remessas a caminho de uma unidade")
+    @r.get("/estoque", summary="Lotes, total, capacidade, espaço livre e remessas a caminho de uma unidade",
+           dependencies=LOGADO)
     def api_estoque(unidade: str | None = None):
         uid = unidade or no.u.id
         return {"unidade": uid, "lotes": no.lotes(uid), "total": no.total_estoque(uid),
@@ -161,12 +260,12 @@ def criar_app(no: No, sync: Sincronizador) -> FastAPI:
                 "disponivel": {s: no.disponivel(uid, s) for s in no.rede.soros}}
 
     @r.post("/entradas", status_code=201, summary="Entrada de lote vindo de fora da rede")
-    def api_entrada(c: Entrada):
-        return no.registrar_entrada(c.soro, c.lote, c.validade, c.qtd)
+    def api_entrada(c: Entrada, conta: dict = Depends(exigir("estoque"))):
+        return no.registrar_entrada(c.soro, c.lote, c.validade, c.qtd, por=conta["login"])
 
     @r.post("/perdas", status_code=201, summary="Perda ou descarte de ampolas de um lote")
-    def api_perda(c: Perda):
-        return no.registrar_perda(c.lote, c.qtd, c.motivo)
+    def api_perda(c: Perda, conta: dict = Depends(exigir("estoque"))):
+        return no.registrar_perda(c.lote, c.qtd, c.motivo, por=conta["login"])
 
     app.include_router(r)
 
@@ -174,13 +273,13 @@ def criar_app(no: No, sync: Sincronizador) -> FastAPI:
     r = APIRouter(prefix="/api", tags=["atendimento"])
 
     @r.post("/casos", status_code=201, summary="Registra um atendimento e dá baixa no soro")
-    def api_novo_caso(c: Caso, resposta: Response):
-        caso = no.atender(c.agravo, c.gravidade, c.ampolas, c.local, c.id, c.data)
+    def api_novo_caso(c: Caso, resposta: Response, conta: dict = Depends(exigir("atender"))):
+        caso = no.atender(c.agravo, c.gravidade, c.ampolas, c.local, c.id, c.data, por=conta["login"])
         if caso.get("repetido"):
             resposta.status_code = 200
         return caso
 
-    @r.get("/casos", summary="Últimos atendimentos (até 200)")
+    @r.get("/casos", summary="Últimos atendimentos (até 200)", dependencies=LOGADO)
     def api_casos(regiao: str | None = None, unidade: str | None = None):
         return no.casos(regiao, unidade)[:200]
 
@@ -189,7 +288,7 @@ def criar_app(no: No, sync: Sincronizador) -> FastAPI:
     # --- remessas e pedidos ---------------------------------------------------
     r = APIRouter(prefix="/api", tags=["remessas e pedidos"])
 
-    @r.get("/remessas", summary="Remessas chegando, enviadas e pedidos em aberto")
+    @r.get("/remessas", summary="Remessas chegando, enviadas e pedidos em aberto", dependencies=LOGADO)
     def api_remessas():
         return {"chegando": no.em_transito(no.u.id),
                 "enviadas": [x for x in no.em_transito() if x["origem"] == no.u.id],
@@ -197,18 +296,20 @@ def criar_app(no: No, sync: Sincronizador) -> FastAPI:
                 "meus_pedidos": [p for p in no.pedidos_abertos() if p["unidade"] == no.u.id]}
 
     @r.post("/remessas", status_code=201, summary="Envia uma remessa para outra unidade")
-    def api_enviar(c: Remessa):
-        return no.enviar_remessa(c.destino, c.soro, c.qtd, c.pedido)
+    def api_enviar(c: Remessa, conta: dict = Depends(exigir("enviar"))):
+        return no.enviar_remessa(c.destino, c.soro, c.qtd, c.pedido, por=conta["login"])
 
     @r.post("/remessas/{rid}/receber", status_code=201, summary="Confirma o recebimento, informando divergência")
-    def api_receber(rid: str = Caminho(pattern="^[0-9a-f]+$"), c: Recebimento | None = None):
-        return no.receber_remessa(rid, c.qtd if c else None)
+    def api_receber(rid: str = Caminho(pattern="^[0-9a-f]+$"), c: Recebimento | None = None,
+                    conta: dict = Depends(exigir("estoque"))):
+        return no.receber_remessa(rid, c.qtd if c else None, por=conta["login"])
 
     @r.post("/pedidos", status_code=201, summary="Pede soro ao fornecedor desta unidade")
-    def api_pedir(c: Pedido):
-        return no.pedir(c.soro, c.qtd)
+    def api_pedir(c: Pedido, conta: dict = Depends(exigir("estoque"))):
+        return no.pedir(c.soro, c.qtd, por=conta["login"])
 
-    @r.get("/sugestoes", summary="Quanto mandar para cada unidade abastecida por esta")
+    @r.get("/sugestoes", summary="Quanto mandar para cada unidade abastecida por esta",
+           dependencies=[Depends(exigir("paineis"))])
     def api_sugestoes():
         return no.sugestoes()
 
@@ -217,28 +318,76 @@ def criar_app(no: No, sync: Sincronizador) -> FastAPI:
     # --- vigilância e painéis ---------------------------------------------------
     r = APIRouter(prefix="/api", tags=["vigilância e painéis"])
 
-    @r.get("/alertas", summary="Alertas de surto ativos")
+    @r.get("/alertas", summary="Alertas de surto ativos", dependencies=LOGADO)
     def api_alertas(regiao: str | None = None, recalcular: bool = False):
         if recalcular:
             no.vigiar()
         return no.alertas_ativos(regiao)
 
-    @r.get("/vigilancia", summary="Casos por dia e limite do método C2 por região")
+    @r.get("/vigilancia", summary="Casos por dia e limite do método C2 por região", dependencies=LOGADO)
     def api_vigilancia():
         regioes = no.regioes_vigiadas() or ([no.u.regiao] if no.u.regiao else [])
         return [{"regiao": g, "serie": no.serie_regiao(g), "alertas": no.alertas_ativos(g)} for g in regioes]
 
-    @r.get("/painel", summary="Painel do polo ou do estado")
+    @r.get("/painel", summary="Painel do polo ou do estado", dependencies=[Depends(exigir("paineis"))])
     def api_painel():
         return no.painel()
 
-    @r.get("/graficos", summary="Séries dos gráficos: uso diário, atendimentos e vencimento")
+    @r.get("/graficos", summary="Séries dos gráficos: uso diário, atendimentos e vencimento", dependencies=LOGADO)
     def api_graficos(dias: int = 30, unidade: str | None = None):
         return no.graficos(max(7, min(90, dias)), unidade)
 
-    @r.get("/criticos", summary="Postos críticos, calculados em paralelo")
+    @r.get("/criticos", summary="Postos críticos, calculados em paralelo", dependencies=[Depends(exigir("paineis"))])
     def api_criticos(soro: str = "SAB", processos: int = 1):
         return no.criticos(soro, max(1, min(32, processos)))
+
+    app.include_router(r)
+
+    # --- contas da equipe -------------------------------------------------------
+    r = APIRouter(prefix="/api", tags=["contas"])
+
+    @r.get("/sessao", summary="Quem está usando este navegador e o que pode fazer")
+    def api_sessao(request: Request):
+        conta = conta_da_sessao(request)
+        return {"usuario": no.publico(conta) if conta else None,
+                "pode": sorted(TIPOS[conta["tipo"]]["pode"]) if conta else [],
+                "primeiro_acesso": no.primeiro_acesso(),
+                "tipos": {k: {"nome": t["nome"], "niveis": t["niveis"]} for k, t in TIPOS.items()}}
+
+    @r.post("/entrar", summary="Login: confere a senha aqui mesmo, sem consultar outro nó")
+    def api_entrar(c: Entrar, resposta: Response):
+        try:
+            conta = no.autenticar(c.login, c.senha)
+        except ErroNegocio:
+            time.sleep(0.4)  # deixa lento quem tenta adivinhar senha
+            raise
+        resposta.set_cookie(COOKIE, sessoes.abrir(conta["login"]), max_age=Sessoes.DURACAO_S,
+                            httponly=True, samesite="strict")
+        return {"usuario": no.publico(conta)}
+
+    @r.post("/sair", summary="Encerra a sessão")
+    def api_sair(request: Request, resposta: Response):
+        sessoes.fechar(request.cookies.get(COOKIE))
+        resposta.delete_cookie(COOKIE)
+        return {}
+
+    @r.post("/senha", summary="Troca a própria senha")
+    def api_senha(c: TrocaSenha, conta: dict = Depends(pessoa)):
+        no.trocar_senha(conta["login"], c.atual, c.nova)
+        return {}
+
+    @r.get("/usuarios", summary="Contas que a pessoa administra")
+    def api_usuarios(conta: dict = Depends(exigir("usuarios"))):
+        return no.usuarios(conta)
+
+    @r.post("/usuarios", status_code=201, summary="Cadastra uma conta (a primeira, de gestão, sem login)")
+    def api_cadastrar(c: NovaConta, request: Request):
+        autor = None if no.primeiro_acesso() else exigir("usuarios")(pessoa(request))
+        return no.cadastrar(c.login, c.nome, c.tipo, c.unidade, c.senha, autor)
+
+    @r.post("/usuarios/{login}/situacao", summary="Desativa ou reativa uma conta")
+    def api_situacao(login: str, c: Situacao, conta: dict = Depends(exigir("usuarios"))):
+        return no.mudar_situacao(login, c.ativo, conta)
 
     app.include_router(r)
 
