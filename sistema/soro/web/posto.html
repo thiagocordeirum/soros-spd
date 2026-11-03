@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Soro · Estoque e atendimento</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap">
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
@@ -64,6 +66,9 @@ async function carregar() {
   ultimoG = g;
   desenharGraficos();
   estoqueAtual = est;
+  const chegando = est.a_caminho.length;
+  App.heroTexto(`${App.milhar(est.total)} ampolas`, `*${est.total} de ${est.capacidade}* lugares da geladeira ocupados. `
+    + (chegando ? `*${chegando} remessa${chegando > 1 ? "s" : ""}* a caminho.` : "Nenhuma remessa a caminho."));
   $("e-ocupacao").textContent = `${est.total} de ${est.capacidade} ampolas na geladeira`;
   const porSoro = {};
   est.lotes.forEach(l => (porSoro[l.soro] ||= []).push(l));
@@ -103,6 +108,9 @@ function previa() {
 
 (async () => {
   const i = await App.cabecalho("posto.html");
+  App.hero({rotulo: "Estoque desta unidade", titulo: "...", texto: "", acoes: [
+    {icone: "frasco", rotulo: "Atender", href: "#f-caso"}, {icone: "estoque", rotulo: "Estoque", href: "#estoque", cor: "azul"},
+    {icone: "caminhao", rotulo: "Remessas", href: "#chegando", cor: "ambar"}, {icone: "pedido", rotulo: "Pedir soro", href: "#f-pedido", cor: "laranja"}]});
   $("c-agravo").innerHTML = Object.entries(i.agravos).map(([k, a]) => `<option value="${k}">${App.esc(a.nome)}</option>`).join("");
   const opcoesSoro = Object.entries(i.soros).map(([k, n]) => `<option value="${k}">${App.esc(n)}</option>`).join("");
   $("p-soro").innerHTML = opcoesSoro;

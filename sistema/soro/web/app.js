@@ -52,44 +52,116 @@ const App = {
     return (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random()).replace(/-/g, "");
   },
 
-  // Cabeçalho com o nome do nó, as telas e o estado da sincronização.
+  // Ícones de traço (24x24), desenhados aqui para não depender de biblioteca externa.
+  ICONES: {
+    inicio: '<path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/>',
+    estoque: '<path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="m3 8 9 5 9-5M12 13v8"/>',
+    painel: '<path d="M3 21h18"/><path d="M7 17v-6M12 17V5M17 17v-9"/>',
+    pin: '<path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/>',
+    rede: '<circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="m8.2 10.8 7.6-3.6M8.2 13.2l7.6 3.6"/>',
+    caminhao: '<path d="M3 6h11v10H3zM14 9h4l3 3v4h-7"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/>',
+    frasco: '<path d="M9 3h6M10 3v4l-4 9a3 3 0 0 0 2.7 4.3h6.6A3 3 0 0 0 18 16l-4-9V3"/><path d="M7.5 13h9"/>',
+    alerta: '<path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17h.01"/>',
+    sino: '<path d="M6 9a6 6 0 0 1 12 0c0 6 2.5 7.5 2.5 7.5h-17S6 15 6 9z"/><path d="M10 20a2 2 0 0 0 4 0"/>',
+    relogio: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+    calendario: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
+    busca: '<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>',
+    telefone: '<path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/>',
+    mapa: '<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2z"/><path d="M9 4v14M15 6v14"/>',
+    hospital: '<rect x="3" y="3" width="18" height="18" rx="4"/><path d="M12 8v8M8 12h8"/>',
+    sincronizar: '<path d="M20 11a8 8 0 0 0-14.9-3M4 13a8 8 0 0 0 14.9 3"/><path d="M4 4v4h4M20 20v-4h-4"/>',
+    pedido: '<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3h6v1M9 11h6M9 15h4"/>',
+    lista: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
+    cobra: '<path d="M3 17c2.5 0 2.5-4 5-4s2.5 4 5 4 2.5-4 5-4c1.4 0 2.2.6 3 1.4"/><circle cx="18.5" cy="8" r="2.2"/><path d="M18.5 10.2V13"/>',
+    escorpiao: '<rect x="8" y="8" width="8" height="11" rx="4"/><path d="M12 8V5a3 3 0 0 1 5-2M4 11h4M16 11h4M4 16h4M16 16h4"/>',
+    duvida: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17h.01"/>',
+    socorro: '<path d="M12 21s-8-4.5-8-11a4.5 4.5 0 0 1 8-2.8A4.5 4.5 0 0 1 20 10c0 6.5-8 11-8 11z"/>',
+    ok: '<path d="m5 12 5 5 9-10"/>',
+  },
+  icone(nome) {
+    return `<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${App.ICONES[nome] || ""}</svg>`;
+  },
+
+  // Cabeçalho: nome da unidade, conexão com os vizinhos e navegação entre as telas
+  // (pílulas no computador, barra flutuante no celular).
   async cabecalho(atual) {
     App.info = await App.api("/api/info");
     const i = App.info;
-    const telas = [["index.html", "Início"]];
-    if (i.nivel === "posto" || i.nivel === "polo") telas.push(["posto.html", "Estoque e atendimento"]);
-    if (i.nivel === "polo") telas.push(["polo.html", "Painel do polo"]);
-    if (i.nivel === "estado") telas.push(["estado.html", "Painel estadual"]);
-    telas.push(["usuario.html", "Onde tem soro"], ["rede.html", "Rede"]);
+    const telas = [["index.html", "Início", "inicio"]];
+    if (i.nivel === "posto" || i.nivel === "polo") telas.push(["posto.html", "Estoque", "estoque"]);
+    if (i.nivel === "polo") telas.push(["polo.html", "Painel", "painel"]);
+    if (i.nivel === "estado") telas.push(["estado.html", "Painel", "painel"]);
+    // No celular cabem quatro telas e o botão central; com cinco, "Onde tem soro" fica só nos atalhos.
+    telas.push(["usuario.html", "Onde tem soro", "pin", telas.length > 2 ? "so-largo" : ""], ["rede.html", "Rede", "rede"]);
     const nivel = {estado: "Secretaria estadual", polo: "Polo", posto: "Ponto de soro"}[i.nivel];
     document.querySelector("header").outerHTML = `<header class="topo">
       <div class="quem"><h1>${App.esc(i.nome)}</h1><small>${nivel}${i.regiao ? " · " + App.esc(i.regiao) : ""} · ${App.esc(i.estado)}</small></div>
-      <nav aria-label="Telas">${telas.map(([h, n]) => `<a href="${h}" ${h === atual ? 'aria-current="page"' : ""}>${n}</a>`).join("")}</nav>
-      <div class="sinc" id="sinc"><span class="ponto"></span><span>sincronização</span></div></header>`;
+      <div class="dir"><a class="sinc" id="sinc" href="rede.html" title="Conexão com os vizinhos">${App.icone("rede")}<span class="ponto"></span><span class="txt">sincronização</span></a></div></header>
+      <nav class="nav" aria-label="Telas">${telas.map(([h, n, ic, cl]) =>
+        `<a href="${h}" class="${cl || ""}" ${h === atual ? 'aria-current="page"' : ""}>${App.icone(ic)}<span>${n}</span></a>`).join("")}</nav>`;
     App.atualizarSinc();
     setInterval(App.atualizarSinc, 5000);
     App.ligarDicas();
     return i;
   },
 
+  // Cartão de destaque com a ação principal; as outras ações viram ladrilhos no topo da folha.
+  // A ação principal também vai para o botão redondo da barra do celular.
+  // acoes: [{icone, rotulo, curto, cor, href | id, valor}]
+  hero({rotulo, titulo, texto, acoes = []}) {
+    const [principal, ...resto] = acoes;
+    const alvo = a => a.href ? `a href="${a.href}"` : `button type="button" id="${a.id}"`;
+    const fim = a => a.href ? "a" : "button";
+    const ladrilho = a => `<${alvo(a)} class="atalho"><span class="ic ${a.cor || ""}">${App.icone(a.icone)}</span>`
+      + `${a.valor !== undefined ? `<b class="valor num" id="${a.id}-v">${a.valor}</b>` : ""}<span>${App.esc(a.rotulo)}</span></${fim(a)}>`;
+    const main = document.querySelector("main");
+    main.insertAdjacentHTML("beforebegin", `<section class="hero"><div class="hero-card">
+      <small id="hero-rot">${App.esc(rotulo)}</small><h2 id="hero-tit">${App.esc(titulo)}</h2>
+      ${principal ? `<div class="hero-botoes"><${alvo(principal)} class="hero-botao">${App.icone(principal.icone)}<span>${App.esc(principal.rotulo)}</span></${fim(principal)}></div>` : ""}
+      </div></section>`);
+    main.insertAdjacentHTML("afterbegin", `<section class="abertura"><p class="frase" id="hero-txt">${App.negrito(texto)}</p>
+      ${resto.length ? `<div class="atalhos">${resto.map(ladrilho).join("")}</div>` : ""}</section>`);
+    const nav = document.querySelector(".nav");
+    if (principal && nav) {
+      const fab = principal.href ? document.createElement("a") : document.createElement("button");
+      fab.className = "fab";
+      if (principal.href) fab.href = principal.href;
+      else { fab.type = "button"; fab.addEventListener("click", () => document.getElementById(principal.id).click()); }
+      fab.innerHTML = `${App.icone(principal.icone)}<span>${App.esc(principal.curto || principal.rotulo)}</span>`;
+      const visiveis = [...nav.querySelectorAll("a:not(.so-largo)")];
+      visiveis[Math.floor(visiveis.length / 2)].before(fab);
+    }
+  },
+  heroTexto(titulo, texto) {
+    if (titulo !== undefined) document.getElementById("hero-tit").textContent = titulo;
+    if (texto !== undefined) document.getElementById("hero-txt").innerHTML = App.negrito(texto);
+  },
+  // Texto da frase de abertura: *assim* vira negrito; o resto é escapado.
+  negrito(s) { return App.esc(s).replace(/\*(.+?)\*/g, "<b>$1</b>"); },
+  milhar(n) { return Number(n).toLocaleString("pt-BR"); },
+
   // Cabeçalho simples da tela do cidadão: sem o menu da equipe.
   async cabecalhoCidadao() {
     App.info = await App.api("/api/info");
     document.querySelector("header").outerHTML = `<header class="topo cidadao">
-      <div class="quem"><h1>Onde tem soro</h1><small>Rede de soros antiveneno · ${App.esc(App.info.estado)}</small></div>
-      <a class="equipe" href="index.html">Área da equipe</a></header>`;
+      <div class="quem"><h1>Olá! Precisa de soro?</h1><small>Soro antiveneno · ${App.esc(App.info.estado)}</small></div>
+      <div class="dir"><a class="sinc" href="index.html">Equipe</a></div></header>`;
     return App.info;
   },
 
   async atualizarSinc() {
+    const el = document.getElementById("sinc");
+    let txt, ok = 0;
     try {
       const s = await App.api("/api/sincronizacao");
-      const ok = s.vizinhos.filter(v => v.ultimo_ok_ha_s !== null && v.ultimo_ok_ha_s < 30).length;
-      document.getElementById("sinc").innerHTML =
-        `<span class="ponto ${ok ? "" : "off"}"></span><span>${ok} de ${s.vizinhos.length} vizinhos · ${s.eventos} registros</span>`;
+      ok = s.vizinhos.filter(v => v.ultimo_ok_ha_s !== null && v.ultimo_ok_ha_s < 30).length;
+      txt = `${ok} de ${s.vizinhos.length} vizinhos · ${App.milhar(s.eventos)} registros`;
     } catch (e) {
-      document.getElementById("sinc").innerHTML = `<span class="ponto off"></span><span>nó sem resposta</span>`;
+      txt = "nó sem resposta";
     }
+    el.querySelector(".ponto").className = "ponto" + (ok ? "" : " off");
+    el.querySelector(".txt").textContent = txt;
+    el.title = `Conexão com os vizinhos: ${txt}`;
   },
 
   soro(cod) {

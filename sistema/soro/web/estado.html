@@ -4,12 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Soro · Painel estadual</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap">
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
 <header></header>
 <main>
-  <section class="numeros" id="numeros"></section>
   <section class="bloco">
     <div class="cab"><h2>Estoque por unidade</h2>
       <label style="flex-direction:row;align-items:center;gap:8px">Soro <select id="soro-painel" style="width:auto"></select></label></div>
@@ -68,11 +69,10 @@ async function carregar() {
   painel = p;
   const total = p.unidades.reduce((a, u) => a + u.total, 0);
   const velhas = p.unidades.filter(u => u.atualizado_ha_s === null || u.atualizado_ha_s > 6 * 3600).length;
-  $("numeros").innerHTML = `
-    <div class="numero"><span class="leve">Ampolas no estado</span><b class="num">${total}</b></div>
-    <div class="numero"><span class="leve">Unidades com dado de mais de 6 h</span><b class="num">${velhas}</b></div>
-    <div class="numero"><span class="leve">Lotes vencendo em 60 dias</span><b class="num">${p.vencendo.length}</b></div>
-    <div class="numero"><span class="leve">Alertas de surto</span><b class="num">${p.alertas.length}</b></div>`;
+  App.heroTexto(`${App.milhar(total)} ampolas`, `Somando *${p.unidades.length} unidades*. Toque num número para ver os detalhes.`);
+  $("h-velhas-v").textContent = velhas;
+  $("h-venc-v").textContent = p.vencendo.length;
+  $("h-alertas-v").textContent = p.alertas.length;
   desenharPainel();
   $("vencendo").innerHTML = p.vencendo.length ? `<table><tr><th>Unidade</th><th>Lote</th><th class="d">Ampolas</th><th>Vence</th><th>Sugestão</th><th></th></tr>
     ${p.vencendo.map(l => `<tr><td>${App.esc(l.nome)}</td><td>${App.esc(l.lote)} (${l.soro})</td><td class="d num">${l.qtd}</td>
@@ -87,6 +87,11 @@ async function carregar() {
 
 (async () => {
   const i = await App.cabecalho("estado.html");
+  App.hero({rotulo: "Ampolas no estado", titulo: "...", texto: "", acoes: [
+    {icone: "rede", rotulo: "Postos críticos", curto: "Críticos", href: "#f-criticos"},
+    {icone: "relogio", rotulo: "Dado com mais de 6 h", valor: "-", id: "h-velhas", href: "#painel", cor: "azul"},
+    {icone: "calendario", rotulo: "Lotes vencendo", valor: "-", id: "h-venc", href: "#vencendo", cor: "ambar"},
+    {icone: "sino", rotulo: "Alertas de surto", valor: "-", id: "h-alertas", href: "#vigilancia", cor: "laranja"}]});
   const op = Object.entries(i.soros).map(([k, n]) => `<option value="${k}">${App.esc(n)}</option>`).join("");
   $("soro-painel").innerHTML = op;
   $("cr-soro").innerHTML = op;
