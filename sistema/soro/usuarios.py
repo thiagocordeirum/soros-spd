@@ -31,7 +31,7 @@ TIPOS = {
 ACOES = {"atender": "registrar atendimentos", "estoque": "mexer no estoque", "enviar": "enviar remessas",
          "paineis": "ver os painéis de gestão", "usuarios": "cadastrar pessoas"}
 
-LOGIN_VALIDO = re.compile(r"^[a-z0-9._-]{3,32}$")
+LOGIN_VALIDO = re.compile(r"^[a-z0-9._@-]{3,64}$")
 SENHA_MINIMA = 8
 
 

@@ -59,6 +59,41 @@ const App = {
     return nome.replace(/[^A-Za-zÀ-ú ]/g, " ").split(/\s+/).filter(w => w.length > 2).slice(0, 2).map(w => w[0]).join("").toUpperCase();
   },
 
+  // Força da senha, para orientar quem digita. O servidor exige só os 8 caracteres.
+  forcaSenha(s) {
+    if (s.length < 8) return {nivel: 0, rotulo: "Curta demais", dica: `faltam ${8 - s.length} caracteres`};
+    const faltam = [];
+    let pontos = 0;
+    if (s.length >= 12) pontos++; else faltam.push("use 12 ou mais caracteres");
+    if (s.length >= 16) pontos++;
+    if (/[a-z]/.test(s) && /[A-Z]/.test(s)) pontos++; else faltam.push("misture maiúsculas e minúsculas");
+    if (/\d/.test(s)) pontos++; else faltam.push("ponha números");
+    if (/[^A-Za-z0-9]/.test(s)) pontos++; else faltam.push("ponha um símbolo");
+    // Sequências e palavras óbvias derrubam qualquer senha para fraca.
+    const obvia = /^(.)\1+$|0123|1234|2345|3456|4567|5678|6789|abcd|qwer|asdf|senha|password|admin|soro|amazonas/i.test(s);
+    if (obvia) pontos = Math.min(pontos, 1);
+    const nivel = pontos <= 1 ? 1 : Math.min(pontos, 4);
+    const rotulo = ["", "Fraca", "Razoável", "Boa", "Forte"][nivel];
+    const dica = obvia ? "evite sequências e palavras óbvias" : nivel < 4 ? faltam[0] || "" : "";
+    return {nivel, rotulo, dica};
+  },
+  medidorSenha(input) {
+    const el = document.createElement("div");
+    el.className = "forca";
+    el.setAttribute("aria-live", "polite");
+    el.innerHTML = '<span class="forca-barras" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span></span>';
+    input.insertAdjacentElement("afterend", el);
+    const atualizar = () => {
+      const f = App.forcaSenha(input.value);
+      el.hidden = !input.value;
+      el.dataset.nivel = f.nivel;
+      el.lastChild.textContent = f.dica ? `${f.rotulo}: ${f.dica}` : f.rotulo;
+    };
+    input.addEventListener("input", atualizar);
+    input.form?.addEventListener("reset", () => setTimeout(atualizar));
+    atualizar();
+  },
+
   novoId() {
     return (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random()).replace(/-/g, "");
   },
