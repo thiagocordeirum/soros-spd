@@ -1,0 +1,15 @@
+{
+  "name": "Onde tem soro",
+  "short_name": "Soro",
+  "description": "Onde tem soro antiveneno mais perto e como chegar.",
+  "lang": "pt-BR",
+  "start_url": "usuario.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#EDE7DA",
+  "theme_color": "#10302C",
+  "icons": [
+    {"src": "icone.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any"},
+    {"src": "icone.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable"}
+  ]
+}

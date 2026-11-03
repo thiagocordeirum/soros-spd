@@ -1,0 +1,61 @@
+{
+  "intervalo_sincronizacao_s": 0.5,
+  "nos": 8,
+  "falha_de_no": {
+    "polo": "tabatinga",
+    "casos_enviados": 30,
+    "aceitos": 30,
+    "convergencia_apos_volta_s": 1.7149889469146729
+  },
+  "dados_iguais": {
+    "casos": 160,
+    "convergencia_s": 1.6809577941894531
+  },
+  "nada_se_perde": {
+    "enviados_distintos": 200,
+    "reenvios": 10,
+    "casos_por_no": {
+      "fvs": 200,
+      "tabatinga": 200,
+      "benjamin": 200,
+      "atalaia": 200,
+      "umariacu": 200,
+      "tefe": 200,
+      "alvaraes": 200,
+      "uarini": 200
+    },
+    "ok": true
+  },
+  "velocidade": [
+    {
+      "processos": 1,
+      "segundos": 7.85,
+      "speedup": 1.0,
+      "eficiencia": 1.0
+    },
+    {
+      "processos": 2,
+      "segundos": 4.56,
+      "speedup": 1.72,
+      "eficiencia": 0.86
+    },
+    {
+      "processos": 4,
+      "segundos": 2.69,
+      "speedup": 2.92,
+      "eficiencia": 0.73
+    },
+    {
+      "processos": 8,
+      "segundos": 2.21,
+      "speedup": 3.55,
+      "eficiencia": 0.44
+    },
+    {
+      "processos": 16,
+      "segundos": 2.03,
+      "speedup": 3.87,
+      "eficiencia": 0.24
+    }
+  ]
+}
