@@ -14,6 +14,11 @@ Tipos de evento e o que guardam (campo ``dados``):
 ``receb``   confirmação de recebimento: remessa, destino, qtd
 ``pedido``  pedido de soro ao fornecedor: id, unidade, para, soro, qtd
 ``alerta``  surto detectado: id, regiao, dia, observado, media, limiar, por
+``usuario`` conta de uma pessoa da equipe: login, nome, tipo, unidade, sal, hash, iter,
+            criado_por, data (ver ``usuarios.py``)
+``usuario_alt`` mudança numa conta: id, login, em (hora), e ``ativo`` e/ou sal, hash, iter
+
+Os registros feitos por alguém da equipe levam ``por`` com o login de quem fez.
 
 Só a própria unidade grava movimentos do seu estoque (o envio é gravado por
 quem envia, o recebimento por quem recebe). Com um único escritor por estoque e
@@ -31,6 +36,8 @@ from pathlib import Path
 
 from . import surto
 from .config import Rede
+from .usuarios import (LOGIN_VALIDO, SENHA_MINIMA, TIPOS, cifrar, confere, pode_cadastrar,
+                       unidades_geridas)
 from .diario import Diario
 from .rotas import INF, Mapa, destinos_com_soro, postos_criticos
 
@@ -74,9 +81,14 @@ class No:
             elif ev["chave"] not in unicos[tipo]:
                 # Mesmo id criado em dois nós (ex.: alerta do polo e da secretaria): fica o primeiro na ordem do diário.
                 unicos[tipo][ev["chave"]] = d
+        # Contas: vale a criação mais antiga de cada login; mudanças entram pela hora em que foram feitas.
+        usuarios = {k: {**d, "ativo": True} for k, d in unicos["usuario"].items()}
+        for alt in sorted(unicos["usuario_alt"].values(), key=lambda a: (a["em"], a["id"])):
+            if alt["login"] in usuarios:
+                usuarios[alt["login"]].update({k: alt[k] for k in ("ativo", "sal", "hash", "iter") if k in alt})
         self._cache = {"lotes": lotes, "dispensas": dispensas, "casos": unicos["caso"],
                        "remessas": unicos["remessa"], "recebimentos": unicos["receb"],
-                       "pedidos": unicos["pedido"], "alertas": unicos["alerta"]}
+                       "pedidos": unicos["pedido"], "alertas": unicos["alerta"], "usuarios": usuarios}
         self._cache_versao = versao
         return self._cache
 
@@ -123,7 +135,7 @@ class No:
         cap = self.rede.unidade(unidade).capacidade
         return cap - self.total_estoque(unidade) - sum(r["qtd"] for r in self.em_transito(unidade))
 
-    def registrar_entrada(self, soro: str, lote: str, validade: str, qtd) -> dict:
+    def registrar_entrada(self, soro: str, lote: str, validade: str, qtd, por: str | None = None) -> dict:
         """Entrada de lote vindo de fora da rede (por exemplo, a cota do Ministério)."""
         self._soro_valido(soro)
         qtd = self._qtd(qtd)
@@ -139,7 +151,7 @@ class No:
                 raise ErroNegocio(f"Não cabe na geladeira: espaço livre de {self.espaco_livre(self.u.id)} ampolas")
             ev = self.diario.acrescentar("mov", f"{self.u.id}|{lote}", {
                 "unidade": self.u.id, "soro": soro, "lote": lote, "validade": validade, "qtd": qtd,
-                "motivo": "entrada", "ref": None, "data": self.hoje().isoformat()})
+                "motivo": "entrada", "ref": None, "data": self.hoje().isoformat(), "por": por})
         return ev["dados"]
 
     def _baixar(self, soro: str, qtd: int, motivo: str, ref: str, data: str) -> list[dict]:
@@ -158,7 +170,7 @@ class No:
                 break
         return itens
 
-    def registrar_perda(self, lote: str, qtd, motivo: str = "perda") -> dict:
+    def registrar_perda(self, lote: str, qtd, motivo: str = "perda", por: str | None = None) -> dict:
         qtd = self._qtd(qtd)
         with self._trava:
             atual = next((l for l in self.lotes(self.u.id) if l["lote"] == lote), None)
@@ -166,12 +178,12 @@ class No:
                 raise ErroNegocio("Lote sem saldo suficiente")
             ev = self.diario.acrescentar("mov", f"{self.u.id}|{lote}", {
                 "unidade": self.u.id, "soro": atual["soro"], "lote": lote, "validade": atual["validade"],
-                "qtd": -qtd, "motivo": motivo, "ref": None, "data": self.hoje().isoformat()})
+                "qtd": -qtd, "motivo": motivo, "ref": None, "data": self.hoje().isoformat(), "por": por})
         return ev["dados"]
 
     # --- atendimento --------------------------------------------------------
     def atender(self, agravo: str, gravidade: str, ampolas, local: str | None = None,
-                caso_id: str | None = None, data: str | None = None) -> dict:
+                caso_id: str | None = None, data: str | None = None, por: str | None = None) -> dict:
         """Registra um caso e dá baixa no soro aplicado.
 
         ``caso_id`` é gerado pelo navegador; se o mesmo caso for enviado de novo
@@ -203,7 +215,7 @@ class No:
                 usado = next((s for s in soros if self.disponivel(self.u.id, s) >= ampolas), None)
             caso = {"id": caso_id, "unidade": self.u.id, "regiao": self.u.regiao, "data": data,
                     "agravo": agravo, "gravidade": gravidade, "soro": usado, "ampolas": ampolas if usado else 0,
-                    "local": local, "atendido": bool(usado) or ampolas == 0, "encaminhado_para": None}
+                    "local": local, "atendido": bool(usado) or ampolas == 0, "encaminhado_para": None, "por": por}
             if ampolas > 0 and not usado:
                 destinos = self.onde_tem_soro(self.u.local, soros, ampolas, excluir=self.u.id)
                 caso["encaminhado_para"] = destinos[0]["unidade"] if destinos else None
@@ -221,7 +233,7 @@ class No:
                       key=lambda c: (c["data"], c["id"]), reverse=True)
 
     # --- remessas e pedidos -------------------------------------------------
-    def enviar_remessa(self, destino: str, soro: str, qtd, pedido: str | None = None) -> dict:
+    def enviar_remessa(self, destino: str, soro: str, qtd, pedido: str | None = None, por: str | None = None) -> dict:
         self._soro_valido(soro)
         qtd = self._qtd(qtd)
         if destino == self.u.id:
@@ -237,11 +249,11 @@ class No:
             data = self.hoje().isoformat()
             itens = self._baixar(soro, qtd, "envio", rid, data)
             remessa = {"id": rid, "origem": self.u.id, "destino": destino, "soro": soro,
-                       "itens": itens, "qtd": qtd, "pedido": pedido, "data": data}
+                       "itens": itens, "qtd": qtd, "pedido": pedido, "data": data, "por": por}
             self.diario.acrescentar("remessa", rid, remessa)
         return remessa
 
-    def receber_remessa(self, remessa_id: str, qtd_recebida=None) -> dict:
+    def receber_remessa(self, remessa_id: str, qtd_recebida=None, por: str | None = None) -> dict:
         with self._trava:
             v = self._visao()
             r = v["remessas"].get(remessa_id)
@@ -267,18 +279,18 @@ class No:
                         "ref": remessa_id, "data": data})
                 resto -= usar
             receb = {"remessa": remessa_id, "destino": self.u.id, "qtd": recebido,
-                     "divergencia": r["qtd"] - recebido, "data": data}
+                     "divergencia": r["qtd"] - recebido, "data": data, "por": por}
             self.diario.acrescentar("receb", remessa_id, receb)
         return receb
 
-    def pedir(self, soro: str, qtd) -> dict:
+    def pedir(self, soro: str, qtd, por: str | None = None) -> dict:
         self._soro_valido(soro)
         qtd = self._qtd(qtd)
         if not self.u.pai:
             raise ErroNegocio("Esta unidade não tem fornecedor na rede")
         pid = uuid.uuid4().hex[:12]
         pedido = {"id": pid, "unidade": self.u.id, "para": self.u.pai, "soro": soro, "qtd": qtd,
-                  "data": self.hoje().isoformat()}
+                  "data": self.hoje().isoformat(), "por": por}
         self.diario.acrescentar("pedido", pid, pedido)
         return pedido
 
@@ -496,6 +508,89 @@ class No:
                          for l, n in resultado.items()), key=lambda x: -x["comunidades"])
         return {"soro": soro, "limite_horas": limite, "processos": processos,
                 "segundos": round(segundos, 4), "postos": linhas}
+
+    # --- contas da equipe ---------------------------------------------------
+    def usuario(self, login: str) -> dict | None:
+        return self._visao()["usuarios"].get(login)
+
+    def publico(self, conta: dict) -> dict:
+        """Conta sem sal nem hash, para mandar às telas."""
+        return {"login": conta["login"], "nome": conta["nome"], "tipo": conta["tipo"],
+                "tipo_nome": TIPOS[conta["tipo"]]["nome"], "unidade": conta["unidade"],
+                "unidade_nome": self.rede.unidade(conta["unidade"]).nome, "ativo": conta["ativo"],
+                "criado_por": conta.get("criado_por"), "data": conta.get("data")}
+
+    def usuarios(self, autor: dict) -> list[dict]:
+        """Contas que ``autor`` administra, por unidade e nome."""
+        geridas = unidades_geridas(self.rede, autor)
+        return sorted((self.publico(c) for c in self._visao()["usuarios"].values()
+                       if geridas is None or c["unidade"] in geridas),
+                      key=lambda c: (c["unidade_nome"], c["nome"].lower()))
+
+    def primeiro_acesso(self) -> bool:
+        """Sem nenhuma conta na rede, a secretaria cria a primeira, de gestão, sem login."""
+        return self.u.nivel == "estado" and not self._visao()["usuarios"]
+
+    def cadastrar(self, login: str, nome: str, tipo: str, unidade: str, senha: str, autor: dict | None) -> dict:
+        login, nome = str(login).strip().lower(), str(nome).strip()
+        if not LOGIN_VALIDO.match(login):
+            raise ErroNegocio("Login com 3 a 32 letras minúsculas, números, ponto, hífen ou sublinhado")
+        if not nome:
+            raise ErroNegocio("Informe o nome")
+        if tipo not in TIPOS:
+            raise ErroNegocio(f"Tipo de conta desconhecido: {tipo}")
+        if unidade not in self.rede.unidades:
+            raise ErroNegocio(f"Unidade desconhecida: {unidade}")
+        if self.rede.unidade(unidade).nivel not in TIPOS[tipo]["niveis"]:
+            raise ErroNegocio(f"{TIPOS[tipo]['nome']} não existe em {self.rede.unidade(unidade).nome}")
+        if len(senha) < SENHA_MINIMA:
+            raise ErroNegocio(f"A senha precisa de pelo menos {SENHA_MINIMA} caracteres")
+        with self._trava:
+            if autor is None:
+                if not self.primeiro_acesso() or tipo != "gestor" or unidade != self.u.id:
+                    raise ErroNegocio("Só a primeira conta, de gestão estadual, pode ser criada sem login")
+            elif not pode_cadastrar(self.rede, autor, tipo, unidade):
+                raise ErroNegocio("Você não pode cadastrar esse tipo de conta nessa unidade")
+            if self.usuario(login):
+                raise ErroNegocio(f"O login {login} já existe")
+            conta = {"login": login, "nome": nome, "tipo": tipo, "unidade": unidade, **cifrar(senha),
+                     "criado_por": autor["login"] if autor else None, "data": self.hoje().isoformat()}
+            self.diario.acrescentar("usuario", login, conta)
+        return self.publico({**conta, "ativo": True})
+
+    def _alterar(self, login: str, **mudanca) -> None:
+        aid = uuid.uuid4().hex
+        self.diario.acrescentar("usuario_alt", aid, {"id": aid, "login": login, "em": time.time(), **mudanca})
+
+    def mudar_situacao(self, login: str, ativo: bool, autor: dict) -> dict:
+        conta = self.usuario(login)
+        if conta is None:
+            raise ErroNegocio("Conta não encontrada")
+        if not pode_cadastrar(self.rede, autor, conta["tipo"], conta["unidade"]):
+            raise ErroNegocio("Você não administra essa conta")
+        if login == autor["login"]:
+            raise ErroNegocio("Você não pode desativar a própria conta")
+        self._alterar(login, ativo=bool(ativo))
+        return self.publico(self.usuario(login))
+
+    def trocar_senha(self, login: str, atual: str, nova: str) -> None:
+        conta = self.usuario(login)
+        if conta is None or not confere(atual, conta):
+            raise ErroNegocio("Senha atual incorreta")
+        if len(nova) < SENHA_MINIMA:
+            raise ErroNegocio(f"A senha precisa de pelo menos {SENHA_MINIMA} caracteres")
+        self._alterar(login, **cifrar(nova))
+
+    def autenticar(self, login: str, senha: str) -> dict:
+        conta = self.usuario(str(login).strip().lower())
+        if conta is None or not confere(senha, conta):
+            raise ErroNegocio("Login ou senha incorretos")
+        if not conta["ativo"]:
+            raise ErroNegocio("Esta conta foi desativada")
+        if conta["unidade"] != self.u.id:
+            raise ErroNegocio(f"Esta conta é de {self.rede.unidade(conta['unidade']).nome}. "
+                              "Entre pelo endereço dessa unidade.")
+        return conta
 
     # --- estado do nó ---------------------------------------------------------
     def info(self) -> dict:

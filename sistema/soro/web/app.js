@@ -1,12 +1,15 @@
 // Funções comuns às telas. Cada página fala só com o nó que a serviu (mesma origem).
 const App = {
   info: null,
+  sessao: null,
 
   async api(caminho, corpo) {
     const opcoes = corpo === undefined ? {} :
       {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(corpo)};
     const r = await fetch(caminho, opcoes);
     const dados = await r.json().catch(() => ({}));
+    // Sessão vencida ou ausente: volta para o login e, depois dele, para esta tela.
+    if (r.status === 401 && !location.pathname.endsWith("/login.html")) App.irParaLogin();
     if (!r.ok) throw new Error(dados.erro || `Erro ${r.status}`);
     return dados;
   },
@@ -48,6 +51,14 @@ const App = {
     App._t = setTimeout(() => (el.hidden = true), 4000);
   },
 
+  irParaLogin() {
+    location.href = "login.html?volta=" + encodeURIComponent(location.pathname.split("/").pop() + location.hash);
+  },
+  pode(acao) { return !!App.sessao?.pode.includes(acao); },
+  iniciais(nome) {
+    return nome.replace(/[^A-Za-zÀ-ú ]/g, " ").split(/\s+/).filter(w => w.length > 2).slice(0, 2).map(w => w[0]).join("").toUpperCase();
+  },
+
   novoId() {
     return (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random()).replace(/-/g, "");
   },
@@ -77,6 +88,10 @@ const App = {
     duvida: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17h.01"/>',
     socorro: '<path d="M12 21s-8-4.5-8-11a4.5 4.5 0 0 1 8-2.8A4.5 4.5 0 0 1 20 10c0 6.5-8 11-8 11z"/>',
     ok: '<path d="m5 12 5 5 9-10"/>',
+    pessoa: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+    equipe: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6.5 6.5 0 0 1 3.5 6"/>',
+    sair: '<path d="M15 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4"/><path d="M10 17l5-5-5-5M15 12H3"/>',
+    cadeado: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
   },
   icone(nome) {
     return `<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${App.ICONES[nome] || ""}</svg>`;
@@ -85,18 +100,20 @@ const App = {
   // Cabeçalho: nome da unidade, conexão com os vizinhos e navegação entre as telas
   // (pílulas no computador, barra flutuante no celular).
   async cabecalho(atual) {
-    App.info = await App.api("/api/info");
-    const i = App.info;
+    [App.info, App.sessao] = await Promise.all([App.api("/api/info"), App.api("/api/sessao")]);
+    if (!App.sessao.usuario) { App.irParaLogin(); return new Promise(() => {}); }
+    const i = App.info, eu = App.sessao.usuario;
     const telas = [["index.html", "Início", "inicio"]];
     if (i.nivel === "posto" || i.nivel === "polo") telas.push(["posto.html", "Estoque", "estoque"]);
-    if (i.nivel === "polo") telas.push(["polo.html", "Painel", "painel"]);
+    if (i.nivel === "polo" && App.pode("paineis")) telas.push(["polo.html", "Painel", "painel"]);
     if (i.nivel === "estado") telas.push(["estado.html", "Painel", "painel"]);
     // No celular cabem quatro telas e o botão central; com cinco, "Onde tem soro" fica só nos atalhos.
     telas.push(["usuario.html", "Onde tem soro", "pin", telas.length > 2 ? "so-largo" : ""], ["rede.html", "Rede", "rede"]);
     const nivel = {estado: "Secretaria estadual", polo: "Polo", posto: "Ponto de soro"}[i.nivel];
     document.querySelector("header").outerHTML = `<header class="topo">
       <div class="quem"><h1>${App.esc(i.nome)}</h1><small>${nivel}${i.regiao ? " · " + App.esc(i.regiao) : ""} · ${App.esc(i.estado)}</small></div>
-      <div class="dir"><a class="sinc" id="sinc" href="rede.html" title="Conexão com os vizinhos">${App.icone("rede")}<span class="ponto"></span><span class="txt">sincronização</span></a></div></header>
+      <div class="dir"><a class="sinc" id="sinc" href="rede.html" title="Conexão com os vizinhos">${App.icone("rede")}<span class="ponto"></span><span class="txt">sincronização</span></a>
+        <a class="avatar" href="equipe.html" title="${App.esc(eu.nome)} · ${App.esc(eu.tipo_nome)}" ${atual === "equipe.html" ? 'aria-current="page"' : ""}>${App.iniciais(eu.nome) || App.icone("pessoa")}</a></div></header>
       <nav class="nav" aria-label="Telas">${telas.map(([h, n, ic, cl]) =>
         `<a href="${h}" class="${cl || ""}" ${h === atual ? 'aria-current="page"' : ""}>${App.icone(ic)}<span>${n}</span></a>`).join("")}</nav>`;
     App.atualizarSinc();
@@ -145,7 +162,7 @@ const App = {
     App.info = await App.api("/api/info");
     document.querySelector("header").outerHTML = `<header class="topo cidadao">
       <div class="quem"><h1>Olá! Precisa de soro?</h1><small>Soro antiveneno · ${App.esc(App.info.estado)}</small></div>
-      <div class="dir"><a class="sinc" href="index.html">Equipe</a></div></header>`;
+      <div class="dir"><a class="avatar" href="perfil.html" title="Seu perfil">${App.icone("pessoa")}</a></div></header>`;
     return App.info;
   },
 

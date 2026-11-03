@@ -1,4 +1,4 @@
-"""Testes do núcleo: diário, regras de estoque, remessas, surto, rotas e sincronização HTTP."""
+"""Testes do núcleo: diário, regras de estoque, remessas, surto, rotas, contas e sincronização HTTP."""
 import itertools
 import json
 import random
@@ -6,12 +6,12 @@ import shutil
 import tempfile
 import time
 import unittest
-import urllib.request
 from collections import Counter
 from datetime import date, timedelta
 from pathlib import Path
 
 from soro import surto
+from soro.cliente import Cliente, ErroApi
 from soro.config import carregar
 from soro.diario import Diario
 from soro.no import ErroNegocio, No
@@ -187,6 +187,53 @@ class TestCnes(Base):
         self.assertEqual((d["estabelecimento"]["nome"], d["lat"], d["lon"]), ("Hospital de Guarnicao de Tabatinga", -4.25, -69.94))
 
 
+GESTOR = {"login": "teste", "tipo": "gestor", "unidade": "fvs"}
+
+
+class TestContas(Base):
+    def test_primeira_conta_so_na_secretaria_e_uma_vez(self):
+        posto, fvs = self.no("atalaia"), self.no("fvs")
+        self.assertFalse(posto.primeiro_acesso())
+        with self.assertRaises(ErroNegocio):
+            posto.cadastrar("ana", "Ana", "profissional", "atalaia", "senha-123", None)
+        fvs.cadastrar("gestor", "Gestão", "gestor", "fvs", "senha-123", None)
+        with self.assertRaises(ErroNegocio):
+            fvs.cadastrar("outro", "Outro", "gestor", "fvs", "senha-123", None)
+        evento = fvs.diario.eventos("usuario")[0]["dados"]
+        self.assertNotIn("senha", evento)
+        self.assertNotIn("senha-123", json.dumps(evento))
+
+    def test_coordenacao_cadastra_so_profissionais_da_sua_regiao(self):
+        polo = self.no("tabatinga")
+        coord = polo.cadastrar("coord", "Coord", "coordenador", "tabatinga", "senha-123", GESTOR)
+        coord = polo.usuario(coord["login"])
+        polo.cadastrar("prof.atalaia", "Prof", "profissional", "atalaia", "senha-123", coord)
+        with self.assertRaises(ErroNegocio):
+            polo.cadastrar("prof.tefe", "Prof", "profissional", "tefe", "senha-123", coord)
+        with self.assertRaises(ErroNegocio):
+            polo.cadastrar("coord2", "Coord", "coordenador", "tabatinga", "senha-123", coord)
+        with self.assertRaises(ErroNegocio):  # gestão só existe na secretaria
+            polo.cadastrar("g2", "G", "gestor", "tabatinga", "senha-123", GESTOR)
+
+    def test_conta_chega_ao_no_e_desativacao_tambem(self):
+        fvs, posto = self.no("fvs"), self.no("atalaia")
+        fvs.cadastrar("ana", "Ana", "profissional", "atalaia", "senha-123", GESTOR)
+        with self.assertRaises(ErroNegocio):
+            posto.autenticar("ana", "senha-123")  # ainda não chegou
+        trocar(fvs, posto)
+        self.assertEqual(posto.autenticar("ana", "senha-123")["unidade"], "atalaia")
+        with self.assertRaises(ErroNegocio):
+            fvs.autenticar("ana", "senha-123")  # conta de outra unidade
+        with self.assertRaises(ErroNegocio):
+            posto.autenticar("ana", "errada-123")
+        posto.trocar_senha("ana", "senha-123", "nova-senha-1")
+        self.assertTrue(posto.autenticar("ana", "nova-senha-1"))
+        fvs.mudar_situacao("ana", False, GESTOR)
+        trocar(fvs, posto)
+        with self.assertRaises(ErroNegocio):
+            posto.autenticar("ana", "nova-senha-1")
+
+
 class TestHTTP(Base):
     """Dois nós de verdade, cada um com servidor HTTP, sincronizando pela rede local."""
 
@@ -196,17 +243,24 @@ class TestHTTP(Base):
             u.porta = 19100 + i
         a, b = self.no("benjamin"), self.no("atalaia")
         sa, sb = ServidorNo(a, intervalo_sync=0.2), ServidorNo(b, intervalo_sync=0.2)
+        a.cadastrar("prof", "Prof", "profissional", "benjamin", "senha-123", GESTOR)
         sa.iniciar(bloquear=False)
         sb.iniciar(bloquear=False)
         try:
-            req = urllib.request.Request(a.u.url + "/api/casos", method="POST",
-                                         data=b'{"agravo":"escorpionico","ampolas":0,"id":"x1"}',
-                                         headers={"Content-Type": "application/json"})
-            urllib.request.urlopen(req, timeout=5).read()
+            cli = Cliente(a.u.url)
+            caso = {"agravo": "escorpionico", "ampolas": 0, "id": "x1"}
+            with self.assertRaises(ErroApi) as e:
+                cli.postar("/api/casos", caso)
+            self.assertEqual(e.exception.status, 401)
+            cli.entrar("prof", "senha-123")
+            cli.postar("/api/casos", caso)
+            with self.assertRaises(ErroApi) as e:
+                cli.obter("/api/painel")  # profissional não vê o painel de gestão
+            self.assertEqual(e.exception.status, 403)
             fim = time.time() + 5
             while time.time() < fim and not b.casos():
                 time.sleep(0.05)
-            self.assertEqual([c["id"] for c in b.casos()], ["x1"])
+            self.assertEqual([(c["id"], c["por"]) for c in b.casos()], [("x1", "prof")])
         finally:
             sa.parar()
             sb.parar()

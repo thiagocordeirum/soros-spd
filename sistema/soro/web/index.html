@@ -26,7 +26,7 @@
   const [est, alertas, cont] = await Promise.all([App.api("/api/estoque"), App.api("/api/alertas"), App.api("/api/contagem")]);
   const acoes = [];
   if (i.nivel !== "estado") acoes.push({icone: "frasco", rotulo: "Atender", href: "posto.html#f-caso"}, {icone: "estoque", rotulo: "Estoque", href: "posto.html#estoque", cor: "azul"});
-  if (i.nivel === "polo") acoes.push({icone: "caminhao", rotulo: "Repor postos", href: "polo.html", cor: "ambar"});
+  if (i.nivel === "polo" && App.pode("paineis")) acoes.push({icone: "caminhao", rotulo: "Repor postos", href: "polo.html", cor: "ambar"});
   if (i.nivel === "estado") acoes.push({icone: "painel", rotulo: "Painel", href: "estado.html"}, {icone: "alerta", rotulo: "Vencendo", href: "estado.html#vencendo", cor: "ambar"});
   acoes.push({icone: "pin", rotulo: "Onde tem soro", href: "usuario.html", cor: "laranja"}, {icone: "rede", rotulo: "Rede", href: "rede.html", cor: "azul"});
   App.hero({rotulo: "Estoque desta unidade", titulo: `${App.milhar(est.total)} ampolas`,

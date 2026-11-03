@@ -80,6 +80,8 @@ def esperar_no(url: str, tempo_limite: float = 15.0) -> None:
 def porta_ocupada(host: str, porta: int) -> bool:
     # Tenta ocupar a porta do mesmo jeito que o nó faria; se não der, outro processo está nela.
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        # Como o uvicorn: conexões recém-fechadas (TIME_WAIT) não impedem; outro servidor escutando, sim.
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             s.bind((host, porta))
             return False
