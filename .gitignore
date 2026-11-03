@@ -1,27 +1,5 @@
-# Python
-__pycache__/
-*.pyc
-.venv/
-
-# Dados gerados pelos nós (bancos SQLite) e testes
-sistema/dados/
-*.db
-*.db-wal
-*.db-shm
-
-# LaTeX
-*.aux
-*.log
-*.out
-*.toc
-*.synctex.gz
-*.fls
-*.fdb_latexmk
-
-# Editor e sistema
-.vscode/
-.idea/
-.DS_Store
-
-# Material da disciplina (do professor), fora do repositório público
-01 - SD - Projeto.pdf
+# O repositório guarda só o sistema; o resto da pasta (relatórios, protótipos,
+# slides, material da disciplina) fica apenas neste computador.
+/*
+!/.gitignore
+!/sistema/
