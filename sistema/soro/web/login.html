@@ -12,6 +12,8 @@ main>*{max-width:460px}
 .entrar .botao{min-height:52px;font-size:16px}
 .rodape{text-align:center}
 .rodape a{color:var(--verde-escuro);font-weight:700}
+.regra{font-size:12.5px;font-weight:500;color:var(--tinta3)}
+.erro-form{background:var(--ruim-fundo);color:var(--ruim);border-radius:var(--r-sm);padding:10px 12px;font-size:14px;font-weight:600}
 </style>
 </head>
 <body>
@@ -27,6 +29,7 @@ main>*{max-width:460px}
   <form class="bloco entrar" id="f-entrar">
     <label>Login<input id="login" autocomplete="username" autocapitalize="none" spellcheck="false" required></label>
     <label>Senha<input id="senha" type="password" autocomplete="current-password" required></label>
+    <p class="erro-form" id="erro-entrar" role="alert" hidden></p>
     <button class="botao" type="submit">Entrar</button>
   </form>
 
@@ -34,8 +37,11 @@ main>*{max-width:460px}
     <h2>Primeiro acesso</h2>
     <p class="leve">A rede ainda não tem nenhuma conta. Crie a conta de gestão estadual; com ela você cadastra a coordenação dos polos e os profissionais.</p>
     <label>Seu nome<input id="p-nome" autocomplete="name" required></label>
-    <label>Login<input id="p-login" autocomplete="username" autocapitalize="none" spellcheck="false" required></label>
-    <label>Senha, com pelo menos 8 caracteres<input id="p-senha" type="password" autocomplete="new-password" minlength="8" required></label>
+    <label>Login<input id="p-login" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="ex.: thiago.melo ou seu e-mail" required>
+      <span class="regra">Sem espaço nem acento. Letras, números, ponto, hífen, sublinhado ou @.</span></label>
+    <label>Senha<input id="p-senha" type="password" autocomplete="new-password" minlength="8" required>
+      <span class="regra">Pelo menos 8 caracteres. Quanto mais longa e variada, melhor.</span></label>
+    <p class="erro-form" id="erro-primeiro" role="alert" hidden></p>
     <button class="botao" type="submit">Criar conta e entrar</button>
   </form>
 
@@ -49,6 +55,11 @@ const volta = (() => {
   const v = new URLSearchParams(location.search).get("volta") || "";
   return /^[a-z]+\.html(#[\w-]*)?$/.test(v) ? v : "index.html";
 })();
+
+function erro(id, msg) {
+  $(id).textContent = msg;
+  $(id).hidden = !msg;
+}
 
 async function entrar(login, senha) {
   await App.api("/api/entrar", {login, senha});
@@ -68,18 +79,21 @@ async function entrar(login, senha) {
     $("titulo").textContent = "Primeiro acesso";
     $("frase").innerHTML = "Esta é a <b>secretaria</b>. A conta criada aqui chega a <b>todos os nós</b> pela sincronização.";
   }
+  App.medidorSenha($("p-senha"));
   $("f-entrar").addEventListener("submit", async e => {
     e.preventDefault();
+    erro("erro-entrar", "");
     try { await entrar($("login").value, $("senha").value); }
-    catch (erro) { App.aviso(erro.message, true); $("senha").select(); }
+    catch (e) { erro("erro-entrar", e.message); $("senha").select(); }
   });
   $("f-primeiro").addEventListener("submit", async e => {
     e.preventDefault();
+    erro("erro-primeiro", "");
     try {
       await App.api("/api/usuarios", {login: $("p-login").value, nome: $("p-nome").value, tipo: "gestor",
                                       unidade: info.id, senha: $("p-senha").value});
       await entrar($("p-login").value.trim().toLowerCase(), $("p-senha").value);
-    } catch (erro) { App.aviso(erro.message, true); }
+    } catch (e) { erro("erro-primeiro", e.message); }
   });
 })().catch(e => App.aviso(e.message, true));
 </script>

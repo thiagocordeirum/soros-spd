@@ -534,7 +534,7 @@ class No:
     def cadastrar(self, login: str, nome: str, tipo: str, unidade: str, senha: str, autor: dict | None) -> dict:
         login, nome = str(login).strip().lower(), str(nome).strip()
         if not LOGIN_VALIDO.match(login):
-            raise ErroNegocio("Login com 3 a 32 letras minúsculas, números, ponto, hífen ou sublinhado")
+            raise ErroNegocio("O login não pode ter espaço nem acento: use letras, números, ponto, hífen, sublinhado ou @ (pode ser o e-mail)")
         if not nome:
             raise ErroNegocio("Informe o nome")
         if tipo not in TIPOS:

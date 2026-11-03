@@ -21,8 +21,8 @@
           <label>Unidade<select id="n-unidade"></select></label>
         </div>
         <div class="campos">
-          <label>Login<input id="n-login" autocapitalize="none" spellcheck="false" placeholder="ex.: maria.silva" required></label>
-          <label>Senha inicial<input id="n-senha" type="text" minlength="8" autocomplete="off" required></label>
+          <label>Login<input id="n-login" autocapitalize="none" spellcheck="false" placeholder="ex.: maria.silva ou e-mail" required></label>
+          <label>Senha inicial (8 ou mais caracteres)<input id="n-senha" type="text" minlength="8" autocomplete="off" required></label>
         </div>
         <p class="leve" id="n-dica"></p>
         <button class="botao" type="submit">Cadastrar</button>
@@ -101,6 +101,8 @@ function mostrarEndereco() {
       {icone: "sair", rotulo: "Sair", id: "sair", cor: "laranja"},
     ]});
   $("s-login").value = eu.login;
+  App.medidorSenha($("s-nova"));
+  App.medidorSenha($("n-senha"));
   $("sair").addEventListener("click", async () => {
     await App.api("/api/sair", {});
     location.href = "login.html";
@@ -132,7 +134,7 @@ function mostrarEndereco() {
       const p = await App.api("/api/usuarios", {nome: $("n-nome").value, tipo: $("n-tipo").value, unidade: $("n-unidade").value,
                                                login: $("n-login").value, senha: $("n-senha").value});
       App.aviso(`Conta ${p.login} criada para ${p.nome}.`);
-      ["n-nome", "n-login", "n-senha"].forEach(id => ($(id).value = ""));
+      ["n-nome", "n-login", "n-senha"].forEach(id => { $(id).value = ""; $(id).dispatchEvent(new Event("input")); });
       carregarPessoas();
     } catch (erro) { App.aviso(erro.message, true); }
   });
