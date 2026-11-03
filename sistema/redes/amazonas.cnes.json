@@ -1,0 +1,72 @@
+{
+ "2016125": {
+  "cnes": "2016125",
+  "nome": "Hospital de Guarnicao de Tabatinga",
+  "endereco": "Avenida da Amizade 887, Centro",
+  "cep": "69640000",
+  "telefone": "(97) 34122403",
+  "lat": -4.25335,
+  "lon": -69.9385,
+  "consultado_em": "2026-11-03"
+ },
+ "2016974": {
+  "cnes": "2016974",
+  "nome": "Hospital Geral de Benjamin Constant Doutor Melvino de Jesus",
+  "endereco": "Rua Treze de Maio 1496, Coimbra",
+  "cep": "69630000",
+  "telefone": "92994614822",
+  "lat": -4.375942471282346,
+  "lon": -70.01861304044724,
+  "consultado_em": "2026-11-03"
+ },
+ "2016672": {
+  "cnes": "2016672",
+  "nome": "Unidade Hospitalar de Atalaia do Norte",
+  "endereco": "Rua Augusto Luzeiro s/n, Centro",
+  "cep": "69650000",
+  "telefone": "97 984614098",
+  "lat": -4.365025531591415,
+  "lon": -70.19049167633057,
+  "consultado_em": "2026-11-03"
+ },
+ "6712606": {
+  "cnes": "6712606",
+  "nome": "Polo Base de Umariacu II",
+  "endereco": "Rua Taruma 01, Umariacu II",
+  "cep": "69640000",
+  "telefone": null,
+  "lat": -4.259,
+  "lon": -69.939,
+  "consultado_em": "2026-11-03"
+ },
+ "2016141": {
+  "cnes": "2016141",
+  "nome": "Hospital Regional de Tefe",
+  "endereco": "Estrada da Bexiga s/n, Fonte Boa",
+  "cep": "69553125",
+  "telefone": "(97)98445-3221",
+  "lat": -3.3526274205536275,
+  "lon": -64.7280764579773,
+  "consultado_em": "2026-11-03"
+ },
+ "2017768": {
+  "cnes": "2017768",
+  "nome": "Unidade Hospitalar de Alvaraes",
+  "endereco": "Estrada Alvaraes Nogueira s/n, Santa Luzia",
+  "cep": "69540000",
+  "telefone": "(97)33451204",
+  "lat": -3.215122,
+  "lon": -64.815042,
+  "consultado_em": "2026-11-03"
+ },
+ "2016443": {
+  "cnes": "2016443",
+  "nome": "Unidade Hospitalar de Uarini",
+  "endereco": "Avenida Franco Lopes s/n, Centro",
+  "cep": "69530000",
+  "telefone": "(97) 3346-1140",
+  "lat": -2.978698810547399,
+  "lon": -65.16122102737427,
+  "consultado_em": "2026-11-03"
+ }
+}

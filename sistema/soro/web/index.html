@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Soro · Início</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header></header>
+<main>
+  <section class="numeros" id="numeros"></section>
+  <section class="grade">
+    <div class="bloco" id="alertas"><h2>Alertas de surto</h2><p class="vazio">Carregando...</p></div>
+    <div class="bloco">
+      <h2>O que dá para fazer aqui</h2>
+      <div id="atalhos" class="campos"></div>
+      <p class="leve">Este nó guarda uma cópia dos dados e continua funcionando mesmo se a secretaria ou o polo sair do ar.</p>
+    </div>
+  </section>
+</main>
+<script src="app.js"></script>
+<script>
+(async () => {
+  const i = await App.cabecalho("index.html");
+  const [est, alertas, cont] = await Promise.all([App.api("/api/estoque"), App.api("/api/alertas"), App.api("/api/contagem")]);
+  document.getElementById("numeros").innerHTML = `
+    <div class="numero"><span class="leve">Ampolas aqui</span><b class="num">${est.total}</b></div>
+    <div class="numero"><span class="leve">Espaço livre na geladeira</span><b class="num">${est.livre}</b></div>
+    <div class="numero"><span class="leve">Remessas chegando</span><b class="num">${est.a_caminho.length}</b></div>
+    <div class="numero"><span class="leve">Casos conhecidos na rede</span><b class="num">${cont.casos}</b></div>`;
+  document.getElementById("alertas").innerHTML = "<h2>Alertas de surto</h2>" + (alertas.length
+    ? alertas.map(a => `<div class="bloco aviso"><h3>Surto no ${App.esc(a.regiao)}</h3>
+        <p>${a.observado} casos em ${App.data(a.dia)}; o normal da região fica abaixo de ${String(a.limiar).replace(".", ",")}.</p></div>`).join("")
+    : `<p class="vazio">Nenhum alerta ativo.</p>`);
+  const atalhos = [];
+  if (i.nivel !== "estado") atalhos.push(["posto.html", "Registrar atendimento e ver estoque"]);
+  if (i.nivel === "polo") atalhos.push(["polo.html", "Repor os postos da região"]);
+  if (i.nivel === "estado") atalhos.push(["estado.html", "Ver o estoque do estado"]);
+  atalhos.push(["usuario.html", "Achar o posto mais próximo com soro"], ["rede.html", "Ver a sincronização"]);
+  document.getElementById("atalhos").innerHTML = atalhos.map(([h, t]) => `<a class="botao" href="${h}" style="text-decoration:none;text-align:center">${t}</a>`).join("");
+})().catch(e => App.aviso(e.message, true));
+</script>
+</body>
+</html>

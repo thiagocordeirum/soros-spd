@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Soro · Estoque e atendimento</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header></header>
+<main>
+  <section class="grade">
+    <div class="bloco">
+      <div class="cab"><h2>Registrar atendimento</h2><span class="leve">sem dados pessoais do paciente</span></div>
+      <form id="f-caso">
+        <div class="campos">
+          <label>Animal<select id="c-agravo"></select></label>
+          <label>Gravidade<select id="c-grav"><option value="leve">Leve</option><option value="moderado" selected>Moderado</option><option value="grave">Grave</option></select></label>
+          <label>Ampolas aplicadas<input id="c-amp" type="number" min="0" value="4" inputmode="numeric"></label>
+          <label>Data<input id="c-data" type="date"></label>
+        </div>
+        <p class="leve" id="c-previa"></p>
+        <button class="botao" type="submit">Salvar atendimento</button>
+      </form>
+      <div id="c-resultado"></div>
+    </div>
+    <div class="bloco">
+      <div class="cab"><h2>Estoque</h2><span class="leve" id="e-ocupacao"></span></div>
+      <div id="estoque"></div>
+    </div>
+  </section>
+  <section class="grade">
+    <div class="bloco"><h2>Remessas chegando</h2><div id="chegando"></div></div>
+    <div class="bloco">
+      <h2>Pedir soro ao fornecedor</h2>
+      <form id="f-pedido"><div class="campos">
+        <label>Soro<select id="p-soro"></select></label>
+        <label>Ampolas<input id="p-qtd" type="number" min="1" value="10" inputmode="numeric"></label>
+      </div><button class="botao sec" type="submit">Enviar pedido</button></form>
+      <div id="meus-pedidos"></div>
+    </div>
+    <div class="bloco">
+      <h2>Entrada de lote</h2>
+      <form id="f-entrada"><div class="campos">
+        <label>Soro<select id="n-soro"></select></label>
+        <label>Lote<input id="n-lote" required></label>
+        <label>Validade<input id="n-val" type="date" required></label>
+        <label>Ampolas<input id="n-qtd" type="number" min="1" value="10" inputmode="numeric"></label>
+      </div><button class="botao sec" type="submit">Registrar entrada</button></form>
+    </div>
+  </section>
+  <section class="grade" id="graficos"></section>
+  <section class="bloco"><h2>Últimos atendimentos aqui</h2><div class="tabela" id="casos"></div></section>
+</main>
+<script src="app.js"></script>
+<script>
+let estoqueAtual = null, ultimoG = null;
+const desenharGraficos = () => { if (ultimoG) $("graficos").innerHTML = App.graficosGerais(ultimoG, {casos: false, W: App.larguraBloco($("graficos"))}); };
+const $ = id => document.getElementById(id);
+
+async function carregar() {
+  const [est, rem, casos, g] = await Promise.all([App.api("/api/estoque"), App.api("/api/remessas"),
+    App.api(`/api/casos?unidade=${App.info.id}`), App.api(`/api/graficos?unidade=${App.info.id}`)]);
+  ultimoG = g;
+  desenharGraficos();
+  estoqueAtual = est;
+  $("e-ocupacao").textContent = `${est.total} de ${est.capacidade} ampolas na geladeira`;
+  const porSoro = {};
+  est.lotes.forEach(l => (porSoro[l.soro] ||= []).push(l));
+  $("estoque").innerHTML = Object.keys(App.info.soros).map(s => {
+    const lotes = porSoro[s] || [];
+    const primeiro = lotes.find(l => !l.vencido);
+    return `<div><div class="cab"><h3>${App.esc(App.soro(s))}</h3><b class="num">${est.disponivel[s]}</b></div>
+      ${lotes.map(l => `<div class="lote"><span class="num">${App.esc(l.lote)} · vence ${App.data(l.validade)} · ${l.qtd} amp.</span>
+        ${l.vencido ? '<span class="etq ruim">vencido</span>' : l === primeiro ? '<span class="etq ok">sai primeiro</span>'
+          : l.vence_em_dias <= 60 ? `<span class="etq aviso">vence em ${l.vence_em_dias} dias</span>` : ""}</div>`).join("")
+        || '<p class="vazio">Sem estoque.</p>'}</div>`;
+  }).join("");
+  $("chegando").innerHTML = rem.chegando.length ? rem.chegando.map(r => `<div class="bloco aviso">
+      <div class="cab"><h3>${r.qtd} amp. de ${App.esc(App.soro(r.soro))}</h3><span class="leve">de ${App.esc(App.info.unidades[r.origem].nome)}, ${App.data(r.data)}</span></div>
+      <form data-remessa="${r.id}"><div class="campos"><label>Quantidade que chegou<input type="number" min="0" max="${r.qtd}" value="${r.qtd}"></label></div>
+      <button class="botao peq" type="submit">Confirmar recebimento</button></form></div>`).join("")
+    : '<p class="vazio">Nenhuma remessa a caminho.</p>';
+  $("meus-pedidos").innerHTML = rem.meus_pedidos.length ? '<p class="leve">Pedidos em aberto: ' +
+    rem.meus_pedidos.map(p => `${p.qtd} amp. de ${App.esc(App.soro(p.soro))} (${App.data(p.data)})`).join("; ") + "</p>" : "";
+  $("casos").innerHTML = casos.length ? `<table><tr><th>Data</th><th>Animal</th><th>Gravidade</th><th>Soro</th><th class="d">Ampolas</th><th>Situação</th></tr>
+    ${casos.slice(0, 15).map(c => `<tr><td>${App.data(c.data)}</td><td>${App.esc(App.info.agravos[c.agravo].nome)}</td><td>${c.gravidade}</td>
+      <td>${c.soro || "-"}</td><td class="d num">${c.ampolas}</td>
+      <td>${c.atendido ? '<span class="etq ok">atendido</span>' : `<span class="etq aviso">encaminhado${c.encaminhado_para ? " a " + App.esc(App.info.unidades[c.encaminhado_para].nome) : ""}</span>`}</td></tr>`).join("")}</table>`
+    : '<p class="vazio">Nenhum atendimento registrado aqui.</p>';
+  previa();
+}
+
+function previa() {
+  if (!estoqueAtual) return;
+  const agravo = $("c-agravo").value, amp = +$("c-amp").value || 0;
+  const soros = App.info.agravos[agravo].soros;
+  const usado = soros.find(s => estoqueAtual.disponivel[s] >= amp);
+  $("c-previa").textContent = amp === 0 ? "Sem soro neste atendimento: só o caso será registrado."
+    : usado ? `Sai ${amp} amp. de ${App.soro(usado)} do lote que vence primeiro.`
+    : `Não há ${soros.map(App.soro).join(" nem ")} suficiente aqui. O caso será salvo e o sistema indica para onde encaminhar.`;
+}
+
+(async () => {
+  const i = await App.cabecalho("posto.html");
+  $("c-agravo").innerHTML = Object.entries(i.agravos).map(([k, a]) => `<option value="${k}">${App.esc(a.nome)}</option>`).join("");
+  const opcoesSoro = Object.entries(i.soros).map(([k, n]) => `<option value="${k}">${App.esc(n)}</option>`).join("");
+  $("p-soro").innerHTML = opcoesSoro;
+  $("n-soro").innerHTML = opcoesSoro;
+  $("c-data").value = i.hoje;
+  $("c-data").max = i.hoje;
+  ["c-agravo", "c-amp"].forEach(id => $(id).addEventListener("input", previa));
+
+  $("f-caso").addEventListener("submit", async e => {
+    e.preventDefault();
+    try {
+      const c = await App.api("/api/casos", {id: App.novoId(), agravo: $("c-agravo").value, gravidade: $("c-grav").value,
+        ampolas: +$("c-amp").value || 0, data: $("c-data").value});
+      if (c.atendido) {
+        App.aviso("Atendimento salvo.");
+        $("c-resultado").innerHTML = "";
+      } else {
+        const s = c.sugestoes || [];
+        $("c-resultado").innerHTML = `<div class="bloco aviso"><h3>Sem soro suficiente aqui</h3>
+          ${s.length ? `<p>Lugares mais rápidos com soro, segundo a última informação de cada um:</p>
+          <ol class="passos">${s.map(d => `<li>${App.esc(d.nome)}: ${String(d.horas).replace(".", ",")} h (${d.trajeto.map(p => p.modal).join(", ")}), informação ${App.idade(d.atualizado_ha_s)}</li>`).join("")}</ol>`
+          : "<p>Nenhuma unidade conhecida tem esse soro agora.</p>"}</div>`;
+        App.aviso("Caso salvo. Veja para onde encaminhar.");
+      }
+      carregar();
+    } catch (err) { App.aviso(err.message, true); }
+  });
+  $("chegando").addEventListener("submit", async e => {
+    e.preventDefault();
+    const f = e.target;
+    try {
+      await App.api(`/api/remessas/${f.dataset.remessa}/receber`, {qtd: +f.querySelector("input").value});
+      App.aviso("Recebimento confirmado.");
+      carregar();
+    } catch (err) { App.aviso(err.message, true); }
+  });
+  $("f-pedido").addEventListener("submit", async e => {
+    e.preventDefault();
+    try {
+      await App.api("/api/pedidos", {soro: $("p-soro").value, qtd: +$("p-qtd").value});
+      App.aviso("Pedido enviado. Ele chega ao fornecedor na próxima sincronização.");
+      carregar();
+    } catch (err) { App.aviso(err.message, true); }
+  });
+  $("f-entrada").addEventListener("submit", async e => {
+    e.preventDefault();
+    try {
+      await App.api("/api/entradas", {soro: $("n-soro").value, lote: $("n-lote").value, validade: $("n-val").value, qtd: +$("n-qtd").value});
+      App.aviso("Entrada registrada.");
+      e.target.reset();
+      carregar();
+    } catch (err) { App.aviso(err.message, true); }
+  });
+  App.aoRedimensionar(desenharGraficos);
+  await carregar();
+  setInterval(carregar, 10000);
+})().catch(e => App.aviso(e.message, true));
+</script>
+</body>
+</html>

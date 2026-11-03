@@ -1,0 +1,579 @@
+% !TeX program = pdflatex
+% !TeX encoding = UTF-8
+\documentclass[a4paper,12pt]{article}
+\usepackage[codigo,tikz]{relatorio}
+\makeatletter\g@addto@macro{\UrlBreaks}{\UrlOrds}\makeatother  % permite quebrar URLs longas
+
+% ── DADOS DO RELATÓRIO ───────────────────────────────────────────────────────
+\disciplina{Sistemas Paralelos e Distribuídos}
+\professor{Ricardo Rios}
+
+\titulo{Logística Distribuída de Soros Antivenenos para Regiões com Conectividade Intermitente}
+\cabecalho{Logística distribuída de soros antivenenos}
+
+\autor{Cristiano Peniche Ceccon}
+\autor{João Victor Mattos Lopes}
+\autor{Thiago Cordeiro de Melo}
+
+\data{\today}
+
+\descricao{%
+  Entrega 1 -- Proposta do projeto. Apresenta o problema, a motivação, o
+  sistema distribuído que será desenvolvido, os resultados esperados e um
+  protótipo inicial em Python que ilustra a ideia.}
+
+\begin{document}
+
+\iniciarPreTextual
+\fazcapa
+\fazfolhaderosto
+
+\begin{resumo}
+  O Brasil já descentralizou o soro antiveneno para unidades de saúde
+  remotas, inclusive polos indígenas da Amazônia, e isso praticamente dobrou
+  a proporção de pacientes tratados nas primeiras seis horas. A
+  descentralização, porém, criou um problema novo: o estoque passou a estar
+  espalhado por dezenas de pontos com internet intermitente, e ninguém tem
+  uma visão confiável de onde há soro, de qual tipo, de qual lote e em que
+  quantidade. Ao mesmo tempo, os casos notificados offline chegam com dias de
+  atraso, o que atrasa a percepção de surtos e distorce a distribuição das
+  cotas. Propomos um sistema distribuído \emph{local-first}, no qual cada
+  posto mantém uma réplica do estado em tipos de dados replicados livres de
+  conflito (CRDTs), sincroniza por anti-entropia quando há enlace e continua
+  operando sem rede. Sobre esse estado replicado o sistema oferece notificação
+  \emph{store-and-forward} de casos, detecção de aumento anormal de casos com
+  alerta direcionado à região afetada, roteamento do paciente até o posto mais
+  próximo que tem o soro adequado e uma análise paralela de criticidade dos
+  postos. Um protótipo com oito nós comunicando-se por TCP mostra que as
+  réplicas convergem após partições de vários dias sem perder notificações e
+  expõe, de forma quantificável, o custo de decidir com informação
+  desatualizada.
+  \palavraschave{sistemas distribuídos; CRDT; tolerância a partição;
+  soro antiveneno; vigilância epidemiológica; Amazônia}
+\end{resumo}
+
+\sumario
+
+\iniciarTextual
+
+% =============================================================================
+\section{Proposta}
+\label{sec:proposta}
+
+\paragraph{Integrantes.} Cristiano Peniche Ceccon, João Victor Mattos Lopes e
+Thiago Cordeiro de Melo.
+
+\paragraph{O problema.} Acidentes por animais peçonhentos são de notificação
+compulsória no Brasil; entre 2007 e 2019 foram quase 1,9 milhão de
+notificações~\cite{completude2023}. A maioria dos casos é leve, mas entre os
+graves a letalidade passa de 4\%~\cite{bjihs2023}, e o prognóstico piora
+quando o soro é aplicado mais de seis horas depois do acidente. O soro existe,
+é produzido no país e é distribuído gratuitamente pelo SUS: o problema é
+\textbf{acesso oportuno}. Na Amazônia, pacientes chegam a usar vários meios de
+transporte e viajar dias até uma unidade com soro~\cite{monteiro2020}. Por
+isso o Ministério da Saúde vem descentralizando o soro para
+\emph{Pontos Estratégicos de Antivenenos} (PEA), que eram cerca de 2.319 em
+abril de 2026~\cite{nt127}, e o projeto SAVING levou o soro a 14 polos-base
+indígenas no Amazonas~\cite{farias2025}.
+
+Descentralizar, no entanto, transforma um estoque central em dezenas de
+estoques pequenos, em locais com energia e internet intermitentes. Hoje não
+há uma visão confiável e atualizada de \emph{onde há soro, de que tipo, de
+qual lote e em que quantidade}; a reposição depende de notificações que,
+justamente nas áreas mais isoladas, chegam atrasadas ou não chegam, o que
+reduz a cota que essas áreas recebem. É um problema de \textbf{estado
+replicado sob partição de rede frequente e prolongada}, consequência direta de
+uma política pública já em execução.
+
+\paragraph{Por que é interessante e desafiador.} Pelo teorema CAP, sob
+partição é preciso escolher entre consistência e disponibilidade. Aqui a
+escolha é clara: um posto isolado por uma semana não pode deixar de registrar
+uma dispensação ou uma notificação porque o servidor está inacessível. Mas
+disponibilidade sem coordenação tem custo: decisões tomadas com visão
+desatualizada (remessas duplicadas, paciente encaminhado a um posto que já
+zerou o estoque) e invariantes que não podem ser garantidas localmente
+(estoque nunca negativo). Equilibrar esses efeitos num cenário real é o
+desafio central do projeto.
+
+\paragraph{O que vamos desenvolver.} Um sistema distribuído
+\emph{local-first} com três tipos de nó (central estadual, polo regional e
+posto), em que cada nó mantém uma réplica completa em CRDTs e sincroniza por
+anti-entropia com os vizinhos sempre que há enlace. Sobre essa base:
+\begin{enumerate}
+  \item \textbf{inventário distribuído} por posto, tipo de soro e lote, com
+        validade e dispensação FEFO (vence primeiro, sai primeiro);
+  \item \textbf{notificação resiliente a desconexão}: o caso é registrado
+        offline e entregue quando houver rede, sem perda nem duplicidade;
+  \item \textbf{alerta de surto por região}: polos e central detectam aumento
+        anormal de casos e o alerta é entregue aos nós da região afetada,
+        disparando reforço de estoque;
+  \item \textbf{roteamento multimodal}: dado o local do acidente, indicar o
+        posto alcançável mais cedo que tem o soro necessário;
+  \item \textbf{análise paralela de criticidade}: quais postos, se zerarem o
+        estoque, deixam comunidades a mais de seis horas do tratamento.
+\end{enumerate}
+
+\paragraph{Resultados esperados.} (i) Um sistema funcional, demonstrável com
+nós em processos ou contêineres separados e partições de rede reais;
+(ii) uma avaliação experimental com métricas de convergência, atraso de
+notificação, atraso de entrega do alerta, tráfego e quantidade de decisões
+tomadas com informação desatualizada, sob diferentes padrões de
+conectividade; (iii) medição do ganho de paralelismo na análise de
+criticidade; (iv) um desenho reaproveitável para outros insumos
+descentralizados com cadeia de frio, como vacinas. O sistema \emph{não} faz
+diagnóstico nem decide conduta terapêutica: a conduta segue a síndrome
+clínica e os protocolos do Ministério da Saúde.
+
+% =============================================================================
+\section{Contexto e motivação}
+\label{sec:contexto}
+
+\subsection{Dimensão do problema}
+
+A Tabela~\ref{tab:sinan} resume as notificações no SINAN entre 2007 e 2019.
+O escorpionismo é o agravo mais frequente no país, mas na região Norte o
+quadro se inverte: o Norte concentrou 31,6\% dos acidentes ofídicos
+nacionais, e no Amazonas cerca de 90\% deles são causados pela
+\emph{Bothrops atrox}, a jararaca-da-Amazônia~\cite{diversitas2022}. Os
+acidentes ofídicos na Amazônia brasileira custam pelo menos R\$~40 milhões
+por ano aos cofres públicos~\cite{butantan40mi}.
+
+\begin{table}[H]
+  \centering
+  \caption{Acidentes por animais peçonhentos notificados no SINAN, 2007--2019~\cite{completude2023}.}
+  \label{tab:sinan}
+  \begin{tabular}{lrr}
+    \toprule
+    \textbf{Tipo de acidente} & \textbf{Casos} & \textbf{Proporção} \\
+    \midrule
+    Escorpionismo        & 1.111.300 & 59,4\% \\
+    Ofidismo (serpentes) &   386.938 & 20,7\% \\
+    Araneísmo (aranhas)  &   373.224 & 19,9\% \\
+    \midrule
+    \textbf{Total}       & \textbf{1.871.462} & \textbf{100\%} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{A descentralização já está em curso}
+
+O projeto SAVING, da Fundação de Medicina Tropical Dr.~Heitor Vieira Dourado
+(vinculada à UEA) com o Instituto Butantan e o Ministério da Saúde, levou o
+soro a 14 polos-base em 7 Distritos Sanitários Especiais Indígenas do
+Amazonas~\cite{farias2025}. Segundo o Instituto Butantan, a proporção de
+pacientes tratados nas primeiras seis horas passou de 40,8\% para
+75,8\%~\cite{butantan40mi}. O relato do programa mostra também as
+restrições do ambiente: cadeia de frio que exige energia 24~horas com
+gerador de reserva, transporte multimodal (avião até Tabatinga, depois barco)
+e comunicação entre equipes de campo e especialistas feita principalmente
+por WhatsApp, SMS e telefone~\cite{farias2025}.
+
+Em 2026, a Nota Técnica Conjunta nº~127/2026 do Ministério da
+Saúde~\cite{nt127} padronizou os PEA, com e sem armazenamento, e trouxe três
+pontos que conversam diretamente com este projeto:
+\begin{itemize}
+  \item os PEA devem estar, como parâmetro, a até 1h30 da população-alvo;
+  \item unidades com estoque devem monitorar validade, comunicar consumo,
+        perdas e necessidade de reposição, e estar cadastradas no Sistema de
+        Informação de Insumos Estratégicos (SIES);
+  \item a relação de PEA, com o tipo de atendimento de cada um, deve ser mantida
+        atualizada e enviada às centrais de regulação do SAMU e aos CIATox,
+        e todos os profissionais devem saber onde ficam os PEA da região.
+\end{itemize}
+Ou seja: manter uma visão atualizada de onde há soro já é uma exigência
+normativa. O que falta é um mecanismo que funcione onde a rede não funciona.
+
+\subsection{O círculo vicioso da subnotificação}
+
+O Ministério da Saúde distribui mensalmente as cotas de soro aos estados com
+base em critérios epidemiológicos, isto é, nas notificações do
+SINAN~\cite{nt127}. Há indícios de subnotificação na região Norte e alta
+proporção de campos ignorados nas fichas~\cite{completude2023}. Onde o
+acesso é pior, notifica-se menos; notificando menos, recebe-se menos soro. Um
+mecanismo de notificação que funcione offline ataca a causa desse ciclo.
+
+% =============================================================================
+\section{Decisões de projeto}
+\label{sec:decisoes}
+
+\paragraph{Disponibilidade acima de consistência forte.} Bancos com
+consistência forte (consenso, \emph{locks} distribuídos) exigem maioria
+alcançável para aceitar escrita; um posto isolado ficaria inoperante.
+Adotamos consistência eventual forte com CRDTs~\cite{shapiro2011}: toda
+operação é aceita localmente, e o \emph{merge} das réplicas é comutativo,
+associativo e idempotente, então réplicas que viram o mesmo conjunto de
+atualizações convergem para o mesmo estado, em qualquer ordem de entrega.
+É a filosofia \emph{local-first}~\cite{kleppmann2019}.
+
+\paragraph{CRDTs escolhidos.}
+\begin{itemize}
+  \item \textbf{Saldo por (posto, lote)}: PN-Counter (entradas somam; dispensações,
+        descartes e transferências subtraem). Os metadados do lote (tipo de
+        soro, validade) são imutáveis.
+  \item \textbf{Notificações de caso e alertas}: conjuntos que só crescem
+        (G-Set), indexados por identificador único. Reentregas são inofensivas,
+        o que dá \emph{store-and-forward} com semântica de entrega exatamente uma vez
+        do ponto de vista da aplicação.
+  \item \textbf{Alertas com identificador determinístico} (região + semana
+        epidemiológica): se o polo e a central detectarem o mesmo surto, os dois
+        alertas viram um só no merge.
+\end{itemize}
+
+\paragraph{Disseminação.} Anti-entropia \emph{push-pull} entre vizinhos da
+topologia (algoritmos epidêmicos~\cite{demers1987}, como no
+Dynamo~\cite{decandia2007}). Não há caminho fixo: a informação de um posto
+isolado pode chegar à central por qualquer vizinho, inclusive, no futuro, por
+um barco que passa pela comunidade levando um dispositivo (\emph{data
+mule})~\cite{pentland2004,fall2003}.
+
+\paragraph{O que o CRDT não resolve.} Convergência não implica invariantes:
+dois dispositivos isolados no mesmo posto podem dispensar o mesmo frasco e o
+saldo convergido fica negativo. O protótipo detecta esse caso; para
+evitá-lo, avaliaremos contadores limitados (\emph{bounded counters}), que
+repartem previamente o direito de decrementar entre réplicas~\cite{balegas2015}.
+
+\paragraph{Dados mínimos.} A notificação replicada carrega apenas o necessário
+para logística e vigilância (posto, região, data, agravo, gravidade, soro e
+ampolas), sem dados pessoais, em linha com a LGPD. O registro clínico
+continua nos sistemas oficiais (SINAN, e-SUS APS, SI-PNI, SIASI).
+
+% =============================================================================
+\section{Arquitetura proposta}
+\label{sec:arquitetura}
+
+A Figura~\ref{fig:arquitetura} mostra a topologia do cenário usado no
+protótipo, inspirado na calha do Solimões. A hierarquia (central, polos,
+postos) espelha a organização regionalizada do SUS e define quem abastece
+quem, mas a sincronização é entre vizinhos, sem ponto único de falha: se a
+central cair, polos e postos continuam trocando estado.
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[
+      font=\sffamily\footnotesize,
+      no/.style={draw, rounded corners=2pt, minimum width=2.25cm, minimum height=0.8cm,
+                 align=center, fill=#1},
+      no/.default=white,
+      bom/.style={thick},
+      ruim/.style={thick, dashed},
+      >=Stealth]
+    \node[no=blue!12]  (man) at (0,0)      {Central\\Manaus};
+    \node[no=green!12] (tab) at (-3.4,-1.9) {Polo\\Tabatinga};
+    \node[no=green!12] (tef) at (3.9,-1.9)  {Polo\\Tefé};
+    \node[no] (bc)  at (-5.6,-3.9) {Posto\\Benjamin Constant};
+    \node[no] (ata) at (-3.4,-5.4) {Posto\\Atalaia do Norte};
+    \node[no] (spo) at (-1.3,-3.9) {Posto\\S. Paulo de Olivença};
+    \node[no] (alv) at (2.5,-3.9)  {Posto\\Alvarães};
+    \node[no] (uar) at (5.3,-3.9)  {Posto\\Uarini};
+    \draw[bom] (man) -- (tab);
+    \draw[bom] (man) -- (tef);
+    \draw[ruim] (tab) -- (tef);
+    \draw[bom] (tab) -- (bc);
+    \draw[ruim] (tab) -- (ata);
+    \draw[ruim] (bc) -- (ata);
+    \draw[ruim] (tab) -- (spo);
+    \draw[bom] (tef) -- (alv);
+    \draw[ruim] (tef) -- (uar);
+    \draw[ruim] (alv) -- (uar);
+    \node[draw, dashed, rounded corners, fit=(tab)(bc)(ata)(spo), inner sep=6pt,
+          label={[font=\sffamily\scriptsize]below:Região Alto Solimões}] {};
+    \node[draw, dashed, rounded corners, fit=(tef)(alv)(uar), inner sep=6pt,
+          label={[font=\sffamily\scriptsize]below:Região Médio Solimões}] {};
+    \begin{scope}[shift={(2.0,-5.6)}]
+      \draw[bom] (0,0) -- (0.7,0) node[right] {enlace estável ($\geq$80\%)};
+      \draw[ruim] (0,-0.45) -- (0.7,-0.45) node[right] {enlace intermitente};
+    \end{scope}
+  \end{tikzpicture}
+  \caption{Topologia do cenário: cada linha é um par de nós que sincroniza
+  diretamente quando o enlace está ativo. O alerta de surto do Alto Solimões
+  é destinado apenas aos nós daquela região (e à central). Municípios reais,
+  enlaces e tempos ilustrativos.}
+  \label{fig:arquitetura}
+\end{figure}
+
+A Figura~\ref{fig:no} mostra os componentes de cada nó. Toda operação do
+usuário (dispensar, receber remessa, notificar caso, consultar onde há soro)
+é feita sobre a réplica local, portanto funciona offline. O detector de surto
+roda nos polos (para a própria região) e na central (para todas).
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[
+      font=\sffamily\footnotesize,
+      caixa/.style={draw, rounded corners=2pt, align=center, minimum height=0.85cm, fill=#1},
+      caixa/.default=white,
+      >=Stealth]
+    \node[caixa=yellow!15, minimum width=3.6cm] (ui) at (0,1.9)
+         {Interface local\\{\scriptsize dispensar, notificar, consultar}};
+    \node[caixa=blue!10, minimum width=7.6cm, minimum height=1.25cm] (rep) at (0,0)
+         {\textbf{Réplica local (CRDTs)}\\[2pt]
+          {\scriptsize inventário PN-Counter por (posto, lote) \quad G-Set de casos \quad G-Set de alertas}};
+    \node[caixa, minimum width=2.4cm] (ae) at (-2.75,-1.95) {Anti-entropia\\{\scriptsize push-pull TCP}};
+    \node[caixa, minimum width=2.4cm] (sur) at (0,-1.95) {Detector de surto\\{\scriptsize C2 (polo/central)}};
+    \node[caixa, minimum width=2.4cm] (rot) at (2.75,-1.95) {Roteador\\{\scriptsize grafo multimodal}};
+    \node[caixa=gray!10, minimum width=1.8cm] (viz) at (-6.2,-1.95) {Vizinhos};
+    \draw[<->, thick] (ui) -- (rep);
+    \draw[<->, thick] (ae) -- (rep.south -| ae);
+    \draw[<->, thick] (sur) -- (rep);
+    \draw[->, thick] (rep.south -| rot) -- (rot);
+    \draw[<->, thick, dashed] (viz) -- node[above, font=\scriptsize] {estado} (ae);
+  \end{tikzpicture}
+  \caption{Componentes de um nó. A réplica é a única fonte de verdade local;
+  a anti-entropia a funde com a dos vizinhos quando há enlace.}
+  \label{fig:no}
+\end{figure}
+
+\paragraph{Fluxos principais.}
+\begin{enumerate}
+  \item \textbf{Atendimento}: o posto procura o soro indicado (ou um substituto
+        aceitável, como o antibotrópico-laquético para acidente botrópico) na
+        réplica local e dá baixa por FEFO. Se não houver, consulta a réplica local
+        e calcula a rota multimodal até o posto mais próximo com saldo suficiente.
+  \item \textbf{Notificação}: o caso entra no G-Set local e se propaga por
+        anti-entropia até a central, por qualquer caminho disponível.
+  \item \textbf{Surto}: o polo conta os casos da região que já conhece e aplica o
+        método C2 do EARS~\cite{hutwagner2003}, que compara o dia com uma linha de
+        base móvel de 7 dias encerrada 3 dias antes. Como as notificações chegam
+        atrasadas, os últimos dias são reavaliados a cada execução.
+  \item \textbf{Reabastecimento}: a central abastece os polos, e cada polo os seus
+        postos, com base na sua visão local; em alerta, o estoque-alvo da região
+        dobra.
+\end{enumerate}
+
+% =============================================================================
+\section{Trabalhos relacionados}
+\label{sec:relacionados}
+
+\paragraph{Sistemas oficiais.} O SIES acompanha a movimentação de insumos
+estratégicos, inclusive soros, e é exigido dos PEA com
+armazenamento~\cite{nt127}; o SINAN registra as notificações. São sistemas
+de registro centralizados que dependem de conectividade (ou de digitação
+posterior) para refletir o estado real. Nossa proposta não os substitui: é
+uma camada operacional que funciona offline e pode alimentá-los quando houver
+rede.
+
+\paragraph{Sistemas logísticos offline-first.} O mSupply, sistema de
+gestão logística de medicamentos muito usado em países de baixa e média
+renda, tem uma versão \emph{offline-first} em que cada unidade opera sem
+internet e sincroniza com um servidor central quando possível~\cite{msupply}.
+O DHIS2 tem aplicativos de coleta que trabalham offline e sincronizam
+depois~\cite{dhis2}. Ambos sincronizam em estrela com um servidor central e
+resolvem conflitos por regras da aplicação; nosso foco é a troca entre
+vizinhos (sem depender de um caminho até a central), o uso de CRDTs com
+garantias formais de convergência e o acoplamento entre estoque, vigilância
+de surtos e roteamento.
+
+\paragraph{Acesso geográfico ao soro.} A Fiocruz estimou o tempo real de
+acesso a serviços com soro cruzando a distribuição da população com a malha
+de deslocamento por modal~\cite{fiocruz2024}. Esses estudos são análises
+estáticas; o nosso roteamento usa o \emph{estoque atual} de cada posto, o que
+muda a resposta quando um posto zera.
+
+\paragraph{Fundamentos de SPD.} CRDTs~\cite{shapiro2011} e sua variante por
+deltas~\cite{almeida2018}; software \emph{local-first}~\cite{kleppmann2019};
+algoritmos epidêmicos~\cite{demers1987,decandia2007}; redes tolerantes a
+atraso e \emph{data mules}~\cite{fall2003,pentland2004}; o teorema
+CAP~\cite{gilbert2002}; e, na vigilância, o EARS~\cite{hutwagner2003} e a
+estatística de varredura espacial~\cite{kulldorff1997}.
+
+% =============================================================================
+\section{Protótipo inicial}
+\label{sec:prototipo}
+
+Para dar concretude à proposta, implementamos um protótipo em Python, só com a
+biblioteca padrão (pasta \texttt{prototipo/}). Ele sobe oito nós, cada um com
+seu servidor TCP, e simula 30 dias no cenário da
+Figura~\ref{fig:arquitetura}: acidentes (com perfil de agravos do Amazonas),
+dispensações, remessas, enlaces que caem e voltam, uma queda de 9 dias em
+Atalaia do Norte e um surto no Alto Solimões entre os dias 14 e 19. Os
+valores do cenário (tempos, estoques, taxas) são ilustrativos.
+
+\begin{lstlisting}
+cd prototipo
+python3 demo.py               # simulação completa (~15 s)
+python3 -m unittest -v        # propriedades do merge, rotas e detector
+python3 bench_paralelo.py     # speedup da análise de criticidade
+\end{lstlisting}
+
+\begin{table}[H]
+  \centering
+  \caption{Resultados de uma execução do protótipo (\texttt{saida\_exemplo.txt}).
+  Execuções diferentes variam nos detalhes, pois o gossip depende do escalonamento real.}
+  \label{tab:demo}
+  \begin{tabularx}{\textwidth}{Xr}
+    \toprule
+    \textbf{Métrica} & \textbf{Valor} \\
+    \midrule
+    Casos simulados / notificações perdidas & 111 / 0 \\
+    Atraso mediano da notificação até a central & 7,4 h \\
+    Atraso máximo (Atalaia do Norte, isolada) & 175 h \\
+    Alerta de surto: atraso até Benjamin Constant / S.~Paulo de Olivença & 5,4 h / 2,4 h \\
+    Alerta de surto: atraso até Atalaia do Norte (isolada) & 141,5 h \\
+    Tentativas de sincronização sem enlace & 42\% \\
+    Tempo de convergência após restabelecer os enlaces & 35 ms \\
+    Pacientes encaminhados a posto que já estava sem soro & 1 de 6 \\
+    Estoque final de SAB em Atalaia (inicial: 40 ampolas) & 152 ampolas \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+A Tabela~\ref{tab:demo} mostra o comportamento esperado e o problema que
+queremos atacar. Nenhuma notificação se perdeu e as réplicas convergiram
+para o mesmo estado (mesmo \emph{hash}) logo que a rede voltou. Os testes
+automatizados verificam, para sequências aleatórias de operações, que o merge
+é comutativo, associativo e idempotente e que qualquer ordem de entrega
+converge. Mas a mesma execução expõe o custo da visão desatualizada: sem
+enxergar o consumo de Atalaia, o polo enviou remessas repetidas, e o posto
+terminou com quase quatro vezes o estoque inicial, enquanto outro paciente
+foi encaminhado a um polo que já não tinha o soro. Tornar visíveis as remessas
+em trânsito e medir esses efeitos sob diferentes padrões de conectividade é
+parte do trabalho das próximas entregas.
+
+A Tabela~\ref{tab:bench} mostra a análise de criticidade N-1 num grafo
+sintético com 22.500 localidades e 200 postos: para cada posto, um Dijkstra
+com múltiplas origens sobre o grafo sem ele. As 200 tarefas são independentes
+e foram distribuídas entre processos. O ganho satura em torno de 3,3 vezes
+porque a máquina usada (Intel i7-12700H, notebook com 6 núcleos de desempenho
+e 8 de eficiência) reduz a frequência sob carga: num laço puramente
+aritmético, 16 processos rendem só 5,7 vezes. Caracterizar esse limite é um
+dos pontos da avaliação.
+
+\begin{table}[H]
+  \centering
+  \caption{Análise de criticidade N-1 em paralelo (22.500 vértices, 200 postos).}
+  \label{tab:bench}
+  \begin{tabular}{rrrr}
+    \toprule
+    \textbf{Processos} & \textbf{Tempo (s)} & \textbf{Speedup} & \textbf{Eficiência} \\
+    \midrule
+     1 & 13,00 & 1,00 & 100\% \\
+     2 &  8,50 & 1,53 &  77\% \\
+     4 &  5,00 & 2,60 &  65\% \\
+     8 &  4,17 & 3,12 &  39\% \\
+    16 &  3,90 & 3,33 &  21\% \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+% =============================================================================
+\section{Plano de trabalho}
+\label{sec:plano}
+
+\begin{table}[H]
+  \centering
+  \caption{Planejamento por entrega.}
+  \label{tab:plano}
+  \begin{tabularx}{\textwidth}{lX}
+    \toprule
+    \textbf{Entrega} & \textbf{Conteúdo} \\
+    \midrule
+    1. Proposta & Este documento e o protótipo de prova de conceito. \\
+    2. Relatório v1 & Resumo, introdução, trabalhos relacionados e projeto;
+      definição das métricas e dos cenários de conectividade. \\
+    3. Relatório v2 & Um processo ou contêiner por nó, persistência local
+      (SQLite), sincronização por deltas~\cite{almeida2018}, remessas em
+      trânsito no estado replicado, contadores limitados; partições reais com
+      \texttt{tc netem}; seção de implementação. \\
+    4. Apresentação & Demonstração ao vivo: derrubar o enlace de um posto,
+      registrar casos offline, disparar o alerta regional e mostrar a
+      convergência ao religar. \\
+    5. Relatório final & Avaliação experimental (convergência, atraso de
+      notificação e de alerta, tráfego, decisões com visão desatualizada,
+      speedup) e discussão. \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+% =============================================================================
+\begin{thebibliography}{99}
+\addcontentsline{toc}{section}{Referências}
+
+\bibitem{completude2023} Completude das notificações dos acidentes por animais
+  peçonhentos no SINAN: estudo descritivo, Brasil, 2007--2019.
+  \textit{Epidemiologia e Serviços de Saúde}, 2023.
+  \url{http://scielo.iec.gov.br/scielo.php?script=sci_arttext&pid=S1679-49742023000100303}.
+
+\bibitem{bjihs2023} Análise epidemiológica dos acidentes com animais
+  peçonhentos no Brasil, 2015--2020. \textit{Brazilian Journal of
+  Implantology and Health Sciences}.
+  \url{https://bjihs.emnuvens.com.br/bjihs/article/view/7820}.
+
+\bibitem{diversitas2022} Epidemiologia de acidentes ofídicos no estado do
+  Amazonas entre 2010--2020. \textit{Diversitas Journal}.
+  \url{https://diversitasjournal.com.br/diversitas_journal/article/view/2138}.
+
+\bibitem{nt127} BRASIL. Ministério da Saúde. \textit{Nota Técnica Conjunta
+  nº 127/2026-SVSA/SAPS/SAES/SESAI/MS}: orientações aos gestores do SUS para
+  a escolha dos Pontos Estratégicos de Antivenenos (PEA). Brasília, maio 2026.
+
+\bibitem{farias2025} SEABRA DE FARIAS, A. et al. Decentralization of
+  snakebite antivenom treatment to indigenous community health centers in the
+  Brazilian Amazon: from demand to the first treatment (the SAVING Program).
+  \textit{PLoS Neglected Tropical Diseases}, 2025.
+  \url{https://pmc.ncbi.nlm.nih.gov/articles/PMC12043230/}.
+
+\bibitem{monteiro2020} MONTEIRO, W. M. et al. Providing antivenom treatment
+  access to all Brazilian Amazon indigenous areas: ``Every life has equal
+  value''. \textit{Toxins}, 2020.
+  \url{https://pmc.ncbi.nlm.nih.gov/articles/PMC7762137/}.
+
+\bibitem{butantan40mi} INSTITUTO BUTANTAN. Envio de soro antiofídico para
+  regiões remotas da Amazônia pouparia R\$ 40 milhões e 10 anos de vida de
+  populações, diz pesquisa. \url{https://butantan.gov.br/noticias/envio-de-soro-antiofidico-para-regioes-remotas-da-amazonia-pouparia-r-40-milhoes-e-10-anos-de-vida-de-populacoes-diz-pesquisa}.
+
+\bibitem{fiocruz2024} Estudo analisa acesso a soro antiofídico em regiões com
+  alto índice de acidentes com cobras. Rádio Nacional / EBC.
+  \url{https://radionacional.ebc.com.br/programas/tarde-nacional-amazonia/estudo-analisa-acesso-a-soro-antiofidico-em-regioes-com-alto-indice-de-acidentes-com-cobras}.
+
+\bibitem{shapiro2011} SHAPIRO, M.; PREGUIÇA, N.; BAQUERO, C.; ZAWIRSKI, M.
+  Conflict-free replicated data types. In: \textit{Symposium on
+  Self-Stabilizing Systems (SSS)}, LNCS 6976, p.~386--400. Springer, 2011.
+
+\bibitem{almeida2018} ALMEIDA, P. S.; SHOKER, A.; BAQUERO, C. Delta state
+  replicated data types. \textit{Journal of Parallel and Distributed
+  Computing}, v.~111, p.~162--173, 2018.
+
+\bibitem{kleppmann2019} KLEPPMANN, M.; WIGGINS, A.; VAN HARDENBERG, P.;
+  McGRANAGHAN, M. Local-first software: you own your data, in spite of the
+  cloud. In: \textit{ACM Onward!}, 2019.
+
+\bibitem{demers1987} DEMERS, A. et al. Epidemic algorithms for replicated
+  database maintenance. In: \textit{ACM Symposium on Principles of Distributed
+  Computing (PODC)}, 1987.
+
+\bibitem{decandia2007} DeCANDIA, G. et al. Dynamo: Amazon's highly available
+  key-value store. In: \textit{ACM Symposium on Operating Systems Principles
+  (SOSP)}, 2007.
+
+\bibitem{gilbert2002} GILBERT, S.; LYNCH, N. Brewer's conjecture and the
+  feasibility of consistent, available, partition-tolerant web services.
+  \textit{ACM SIGACT News}, v.~33, n.~2, 2002.
+
+\bibitem{balegas2015} BALEGAS, V. et al. Extending eventually consistent
+  cloud databases for enforcing numeric invariants. In: \textit{IEEE
+  Symposium on Reliable Distributed Systems (SRDS)}, 2015.
+
+\bibitem{fall2003} FALL, K. A delay-tolerant network architecture for
+  challenged internets. In: \textit{ACM SIGCOMM}, 2003.
+
+\bibitem{pentland2004} PENTLAND, A.; FLETCHER, R.; HASSON, A. DakNet:
+  rethinking connectivity in developing nations. \textit{IEEE Computer},
+  v.~37, n.~1, 2004.
+
+\bibitem{hutwagner2003} HUTWAGNER, L. et al. The bioterrorism preparedness
+  and response Early Aberration Reporting System (EARS). \textit{Journal of
+  Urban Health}, v.~80, supl.~1, 2003.
+
+\bibitem{kulldorff1997} KULLDORFF, M. A spatial scan statistic.
+  \textit{Communications in Statistics -- Theory and Methods}, v.~26, n.~6,
+  1997.
+
+\bibitem{msupply} mSUPPLY FOUNDATION. \textit{Open mSupply: synchronisation
+  (offline first)}. \url{https://msupply.foundation/open-msupply/sync}.
+
+\bibitem{dhis2} DHIS2. \textit{DHIS2 Documentation}.
+  \url{https://docs.dhis2.org}.
+
+\end{thebibliography}
+
+\end{document}

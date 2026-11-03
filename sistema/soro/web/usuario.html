@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#10302C">
+<meta name="description" content="Onde tem soro antiveneno mais perto e como chegar.">
+<title>Onde tem soro</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icone.svg" type="image/svg+xml">
+<link rel="stylesheet" href="app.css">
+<!-- Leaflet e OpenStreetMap: gratuitos, sem chave. Sem internet, a página usa o mapa esquemático. -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+main{max-width:1100px;gap:16px}
+.cidadao .equipe{color:var(--sobre-verde2);font-size:13px}
+.ligar{display:grid;grid-template-columns:2fr 1fr;gap:10px}
+.ligar a{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:64px;border-radius:14px;text-decoration:none;font-weight:800;font-size:20px;background:#B3261E;color:#fff}
+.ligar a small{font-size:13px;font-weight:600;opacity:.9}
+.ligar a.sec{background:var(--cartao);color:var(--tinta);border:1.5px solid var(--linha);font-size:18px}
+.passo-t{font-size:15px;font-weight:700}
+.animais{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
+.animais label{flex-direction:row;align-items:center;justify-content:center;min-height:56px;border:1.5px solid var(--linha);border-radius:12px;background:var(--sup);color:var(--tinta);font-size:15px;font-weight:700;cursor:pointer;text-align:center;padding:8px}
+.animais input{position:absolute;opacity:0;width:1px;height:1px}
+.animais label:has(input:checked){background:var(--ok);border-color:var(--ok);color:var(--cartao)}
+.animais label:has(input:focus-visible){outline:3px solid var(--laranja);outline-offset:2px}
+.grande{min-height:56px;font-size:17px;width:100%;background:var(--ok);color:var(--cartao)}
+.ou{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end}
+.privado{font-size:12px;color:var(--tinta3)}
+.abas{display:none;gap:6px}
+.abas button{flex:1;min-height:44px;border-radius:10px;border:1.5px solid var(--linha);background:var(--cartao);color:var(--tinta);font-weight:700}
+.abas button[aria-selected="true"]{background:var(--ok);border-color:var(--ok);color:var(--cartao)}
+.saida{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);gap:16px;align-items:start}
+#painel-lista{display:flex;flex-direction:column;gap:12px}
+#mapa.real{height:460px;border-radius:10px;overflow:hidden}
+.destino{cursor:pointer;gap:8px}
+.destino.sel{border:2px solid var(--ok)}
+.destino .horas{font-size:24px;font-weight:800}
+.destino .horas.longe{color:var(--ferrugem)}
+.estab{font-size:14px;color:var(--tinta2)}
+.acoes{display:flex;flex-wrap:wrap;gap:8px}
+.acoes a{text-decoration:none;min-height:40px;display:inline-flex;align-items:center}
+.offline{background:var(--aviso-fundo);border:1px solid var(--aviso-linha);border-radius:10px;padding:10px 12px;font-size:14px}
+details.socorro summary{cursor:pointer;font-weight:700}
+details.socorro ul{margin:8px 0 0;padding-left:20px;display:flex;flex-direction:column;gap:4px}
+@media (max-width:760px){
+  .abas{display:flex;position:sticky;top:0;z-index:5;background:var(--fundo);padding:6px 0}
+  .saida{grid-template-columns:1fr}
+  .saida[data-aba="lista"] #painel-mapa,.saida[data-aba="mapa"] #painel-lista{display:none}
+  #mapa.real{height:65vh}
+  .ou{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<header></header>
+<main>
+  <section class="ligar" aria-label="Emergência">
+    <a href="tel:192">Ligar 192<small>SAMU</small></a>
+    <a href="tel:193" class="sec">193<small>Bombeiros</small></a>
+  </section>
+
+  <section class="bloco">
+    <form id="f-busca">
+      <fieldset style="border:0;padding:0;margin:0;display:flex;flex-direction:column;gap:8px">
+        <legend class="passo-t" style="margin-bottom:8px">O que picou?</legend>
+        <div class="animais" id="animais"></div>
+      </fieldset>
+      <p class="passo-t" style="margin-top:6px">Onde você está?</p>
+      <button class="botao grande" type="button" id="gps">Usar minha localização</button>
+      <div class="ou">
+        <label>ou escolha na lista<select id="local"></select></label>
+        <button class="botao sec" type="submit" style="min-height:44px">Buscar</button>
+      </div>
+      <p class="privado">Você também pode tocar no mapa onde está. A localização serve só para achar o lugar mais perto e não fica guardada.</p>
+    </form>
+  </section>
+
+  <div class="abas" role="tablist" aria-label="Ver resultado">
+    <button type="button" role="tab" aria-selected="true" data-aba="lista">Lista</button>
+    <button type="button" role="tab" aria-selected="false" data-aba="mapa">Mapa</button>
+  </div>
+  <section class="saida" data-aba="lista">
+    <div id="painel-lista">
+      <div class="bloco" id="resultado"><p class="vazio">Escolha o animal e diga onde você está.</p></div>
+      <details class="bloco socorro">
+        <summary>O que fazer até chegar ao atendimento</summary>
+        <ul>
+          <li>Lave o local da picada com água e sabão.</li>
+          <li>Deixe a pessoa deitada e calma. Evite que ela ande ou corra.</li>
+          <li>Tire anéis, relógio e calçados apertados, porque o local pode inchar.</li>
+          <li>Se der para fazer sem risco, tire uma foto do animal.</li>
+          <li>Não faça torniquete. Não corte, não fure e não chupe o local.</li>
+          <li>Não passe nada na picada (pó de café, folhas, querosene) e não dê bebida alcoólica.</li>
+        </ul>
+        <p class="leve" style="margin-top:8px">Quem decide se precisa de soro e quanto é a equipe de saúde. Fonte: orientações do Ministério da Saúde.</p>
+      </details>
+    </div>
+    <div class="bloco" id="painel-mapa"><div id="mapa" class="grafico"></div>
+      <p class="leve" id="legenda-mapa"></p></div>
+  </section>
+</main>
+<script src="app.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+let geo = null;
+
+const cor = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const unidadeEm = () => Object.fromEntries(Object.entries(geo.unidades).map(([, u]) => [u.local, u]));
+const agravo = () => document.querySelector("input[name=agravo]:checked")?.value || "";
+let mapa = null, camada = null, projecao = null, ultimoDesenho = [];
+
+function desenharMapa(destaque = [], origem = $("local").value, voce = null) {
+  ultimoDesenho = [destaque, origem, voce];
+  // Com a aba do mapa escondida (celular), o Leaflet não sabe o tamanho; desenha ao abrir a aba.
+  if (window.L && !$("mapa").offsetWidth && mapa) return;
+  if (window.L) return desenharMapaReal(destaque, origem, voce);
+  desenharEsquema(destaque, origem, voce);
+}
+
+// Mapa real: fundo do OpenStreetMap, trechos e caminho por cima. Os trechos são linhas
+// retas entre localidades; o percurso real segue o rio.
+function desenharMapaReal(destaque, origem, voce) {
+  if (!mapa) {
+    $("mapa").className = "real";
+    mapa = L.map("mapa", {scrollWheelZoom: false});
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 18, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'}).addTo(mapa);
+    camada = L.layerGroup().addTo(mapa);
+    // Tocar no mapa manda só a coordenada; o servidor acha a localidade mais perto.
+    mapa.on("click", e => buscar({lat: e.latlng.lat.toFixed(5), lon: e.latlng.lng.toFixed(5), agravo: agravo()}, "mapa"));
+    $("legenda-mapa").textContent = "Toque no mapa onde você está para buscar a partir dali. Laranja: caminho calculado. Verde: lugar com soro. Os trechos são ligações diretas; o percurso real segue o rio.";
+  }
+  camada.clearLayers();
+  const loc = Object.fromEntries(geo.localidades.map(l => [l.id, l]));
+  const ll = id => [loc[id].lat, loc[id].lon];
+  const unid = unidadeEm();
+  const naRota = new Set(destaque.map(p => [p.de, p.para].sort().join("|")));
+  geo.trechos.forEach(([a, b, h, modal]) => {
+    if (naRota.has([a, b].sort().join("|"))) return;
+    L.polyline([ll(a), ll(b)], {color: cor("--tinta3"), weight: 2, opacity: .6, dashArray: modal === "avião" ? "6 6" : null})
+      .bindTooltip(`${modal}, ${App.num(h)} h`).addTo(camada);
+  });
+  destaque.forEach(p => L.polyline([ll(p.de), ll(p.para)], {color: cor("--laranja"), weight: 6, opacity: .95})
+    .bindTooltip(`${p.modal}, ${App.num(p.horas)} h`).addTo(camada));
+  geo.localidades.forEach(l => {
+    const u = unid[l.id];
+    L.circleMarker([l.lat, l.lon], {radius: u ? 8 : 4, color: "#fff", weight: 2, fillOpacity: 1,
+      fillColor: u ? cor("--ok") : cor("--tinta3")})
+      .bindTooltip(u ? `${l.nome}: ${u.estabelecimento || u.nome}` : l.nome).addTo(camada);
+  });
+  const o = loc[origem];
+  if (o) L.circleMarker([o.lat, o.lon], {radius: 10, color: cor("--laranja"), weight: 4, fill: false})
+    .bindTooltip("Saída: " + o.nome, {permanent: true, direction: "top", offset: [0, -8]}).addTo(camada);
+  if (voce) {
+    L.circleMarker(voce, {radius: 7, color: "#fff", weight: 2, fillColor: "#2b6cb0", fillOpacity: 1})
+      .bindTooltip("Você").addTo(camada);
+    if (o) L.polyline([voce, [o.lat, o.lon]], {color: "#2b6cb0", weight: 2, dashArray: "4 6"}).addTo(camada);
+  }
+  // Enquadra o caminho; sem caminho, mostra a vizinhança da origem.
+  const pts = destaque.flatMap(p => [ll(p.de), ll(p.para)]);
+  if (voce) pts.push(voce);
+  if (pts.length > 1) mapa.fitBounds(pts, {padding: [40, 40], maxZoom: 11});
+  else if (o) mapa.setView([o.lat, o.lon], 8);
+  else mapa.fitBounds(geo.localidades.map(l => [l.lat, l.lon]), {padding: [20, 20]});
+}
+
+// Mapa esquemático em SVG, usado quando não há internet para carregar o mapa real.
+function desenharEsquema(destaque, origem, voce) {
+  $("legenda-mapa").textContent = "Sem internet o mapa real não carrega. Este é um esquema da região; toque nele onde você está para buscar a partir dali. O caminho calculado aparece em laranja.";
+  const o = geo.localidades.find(l => l.id === origem) || geo.localidades[0];
+  const noCaminho = new Set(destaque.flatMap(p => [p.de, p.para]));
+  const locs = geo.localidades.filter(l => noCaminho.has(l.id) || Math.hypot(l.lat - o.lat, l.lon - o.lon) < 4);
+  const visiveis = new Set(locs.map(l => l.id));
+  const xs = locs.map(l => l.lon), ys = locs.map(l => l.lat);
+  const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+  const W = 640, H = 420, m = 40;
+  const px = lon => m + (lon - x0) / (x1 - x0 || 1) * (W - 2 * m), py = lat => m + (y1 - lat) / (y1 - y0 || 1) * (H - 2 * m);
+  projecao = {W, H, m, x0, x1, y0, y1};
+  const pos = Object.fromEntries(locs.map(l => [l.id, [px(l.lon), py(l.lat)]]));
+  const naRota = new Set(destaque.map(p => [p.de, p.para].sort().join("|")));
+  const unid = unidadeEm();
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Mapa esquemático das localidades e do caminho" style="cursor:crosshair">`;
+  geo.trechos.forEach(([a, b, h, modal]) => {
+    if (!visiveis.has(a) || !visiveis.has(b)) return;
+    const on = naRota.has([a, b].sort().join("|"));
+    s += `<line x1="${pos[a][0]}" y1="${pos[a][1]}" x2="${pos[b][0]}" y2="${pos[b][1]}" stroke="${on ? "var(--laranja)" : "var(--linha)"}" stroke-width="${on ? 5 : 2}" ${modal === "avião" ? 'stroke-dasharray="6 6"' : ""}/>`;
+  });
+  locs.forEach(l => {
+    const u = unid[l.id], [x, y] = pos[l.id];
+    s += `<circle cx="${x}" cy="${y}" r="${u ? 7 : 4}" fill="${u ? "var(--ok)" : "var(--tinta3)"}"/>`;
+    s += `<text x="${x + 9}" y="${y + 4}" font-size="11" fill="var(--tinta2)">${App.esc(l.nome)}</text>`;
+  });
+  if (voce) s += `<circle cx="${px(voce[1])}" cy="${py(voce[0])}" r="7" fill="#2b6cb0" stroke="var(--cartao)" stroke-width="2"/>`;
+  $("mapa").innerHTML = s + "</svg>";
+}
+
+// Converte o toque no esquema de volta em latitude e longitude.
+$("mapa").addEventListener("click", e => {
+  const svg = e.target.closest("svg");
+  if (window.L || !svg || !projecao) return;
+  const r = svg.getBoundingClientRect(), {W, H, m, x0, x1, y0, y1} = projecao;
+  const sx = (e.clientX - r.left) * W / r.width, sy = (e.clientY - r.top) * H / r.height;
+  const lon = x0 + (sx - m) / (W - 2 * m) * (x1 - x0), lat = y1 - (sy - m) / (H - 2 * m) * (y1 - y0);
+  buscar({lat: lat.toFixed(5), lon: lon.toFixed(5), agravo: agravo()}, "mapa");
+});
+
+// Telefone do CNES vira link de ligação (+55 e DDD); sem telefone, não mostra nada.
+function telefone(t) {
+  const n = String(t || "").replace(/\D/g, "");
+  if (n.length < 10 || n.length > 11) return "";
+  return `<a class="botao sec peq" href="tel:+55${n}">Ligar (${n.slice(0, 2)}) ${n.slice(2, -4)}-${n.slice(-4)}</a>`;
+}
+
+function mostrar(r, voce, offline = null) {
+  $("local").value = r.origem;
+  const aviso = offline ? `<p class="offline">Sem conexão. Esta é a última busca, feita em ${App.esc(offline)}. O estoque pode ter mudado.</p>` : "";
+  const perto = r.distancia_km > 2 ? `<p class="leve">O ponto do mapa mais perto de você é ${App.esc(r.origem_nome)}, a ${App.num(r.distancia_km)} km em linha reta.</p>` : "";
+  if (!r.destinos.length) {
+    $("resultado").innerHTML = `${aviso}<h2>Nenhum lugar com soro encontrado</h2><p>Ligue 192 (SAMU) para orientação.</p>`;
+    desenharMapa([], r.origem, voce);
+    return;
+  }
+  $("resultado").innerHTML = `${aviso}<h2>Saindo de ${App.esc(r.origem_nome)}</h2>${perto}
+    <p class="leve">Lugares com pelo menos ${r.minimo} ampolas do soro, do mais rápido ao mais lento. Toque num lugar para ver o caminho no mapa.</p>` + r.destinos.map((d, i) => `
+    <div class="bloco destino ${i === 0 ? "sel" : ""}" data-i="${i}" tabindex="0" role="button" aria-label="Ver caminho até ${App.esc(d.nome)} no mapa">
+      <div class="cab"><h3>${App.esc(d.nome)}</h3><span class="horas num ${d.acima_do_limite ? "longe" : ""}">${App.num(d.horas)} h</span></div>
+      ${d.estabelecimento ? `<p class="estab"><b>${App.esc(d.estabelecimento.nome)}</b><br>${App.esc(d.estabelecimento.endereco || "")}</p>` : ""}
+      <ol class="passos">${d.trajeto.length ? d.trajeto.map(p => `<li>${App.esc(p.de_nome)} até ${App.esc(p.para_nome)} de ${p.modal} (${App.num(p.horas)} h)</li>`).join("") : "<li>Você já está aqui.</li>"}</ol>
+      <p class="leve">Soro: ${Object.entries(d.estoque).filter(([, q]) => q > 0).map(([s, q]) => `${App.soro(s)} (${q} amp.)`).join(", ")}.
+        Estoque informado ${App.idade(d.atualizado_ha_s)}.${d.acima_do_limite ? " Mais de 6 horas de viagem: procure orientação pelo 192." : ""}</p>
+      <div class="acoes">
+        <a class="botao sec peq" href="https://www.google.com/maps/dir/?api=1&destination=${d.lat},${d.lon}" target="_blank" rel="noopener">Abrir no Google Maps</a>
+        ${telefone(d.estabelecimento?.telefone)}
+      </div>
+    </div>`).join("") + `<p class="leve">Endereço e telefone: CNES, Ministério da Saúde. O Google Maps só traça caminho por estrada; use para chegar à unidade dentro da cidade.</p>`;
+  desenharMapa(r.destinos[0].trajeto, r.origem, voce);
+  $("resultado").querySelectorAll(".destino").forEach(c => {
+    const ver = e => {
+      if (e?.target?.closest("a")) return;
+      $("resultado").querySelectorAll(".destino").forEach(x => x.classList.toggle("sel", x === c));
+      desenharMapa(r.destinos[+c.dataset.i].trajeto, r.origem, voce);
+      if (matchMedia("(max-width:760px)").matches) trocarAba("mapa");
+    };
+    c.addEventListener("click", ver);
+    c.addEventListener("keydown", e => { if (e.target === c && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); ver(); } });
+  });
+}
+
+// A última busca fica no aparelho para ser mostrada se a conexão cair.
+async function buscar(params, aba = "lista") {
+  const voce = params.lat !== undefined ? [+params.lat, +params.lon] : null;
+  $("resultado").innerHTML = '<p class="vazio">Buscando...</p>';
+  trocarAba(aba);
+  // No celular o resultado fica abaixo do formulário: rola até ele.
+  if (matchMedia("(max-width:760px)").matches) document.querySelector(".abas").scrollIntoView({behavior: "smooth"});
+  try {
+    const r = await App.api("/api/onde-tem-soro?" + new URLSearchParams(params));
+    const quando = new Date().toLocaleString("pt-BR", {dateStyle: "short", timeStyle: "short"});
+    try { localStorage.setItem("ultima-busca", JSON.stringify({r, voce, quando})); } catch (e) { /* sem armazenamento */ }
+    mostrar(r, voce);
+  } catch (err) {
+    let salva = null;
+    try { salva = JSON.parse(localStorage.getItem("ultima-busca")); } catch (e) { /* sem armazenamento */ }
+    if (salva) mostrar(salva.r, salva.voce, salva.quando);
+    else $("resultado").innerHTML = "<p>Sem conexão com o servidor. Ligue 192 (SAMU).</p>";
+  }
+}
+
+function trocarAba(aba) {
+  document.querySelector(".saida").dataset.aba = aba;
+  document.querySelectorAll(".abas button").forEach(b => b.setAttribute("aria-selected", String(b.dataset.aba === aba)));
+  if (aba === "mapa" && mapa) setTimeout(() => { mapa.invalidateSize(); desenharMapa(...ultimoDesenho); }, 50);
+}
+
+(async () => {
+  await App.cabecalhoCidadao();
+  geo = await App.api("/api/localidades");
+  $("local").innerHTML = [...geo.localidades].sort((a, b) => a.nome.localeCompare(b.nome))
+    .map(l => `<option value="${l.id}">${App.esc(l.nome)}</option>`).join("");
+  $("local").value = App.info.local;
+  $("animais").innerHTML = [...Object.entries(App.info.agravos).map(([k, a]) => [k, a.nome.replace(/^Cobra: /, "Cobra ")]), ["", "Não sei"]]
+    .map(([k, n], i) => `<label><input type="radio" name="agravo" value="${k}" ${i === 0 ? "checked" : ""}><span>${App.esc(n)}</span></label>`).join("");
+  desenharMapa();
+  document.querySelectorAll(".abas button").forEach(b => b.addEventListener("click", () => trocarAba(b.dataset.aba)));
+  $("f-busca").addEventListener("submit", e => {
+    e.preventDefault();
+    buscar({local: $("local").value, agravo: agravo()});
+  });
+  $("gps").addEventListener("click", () => {
+    if (!navigator.geolocation) return App.aviso("Este navegador não informa a localização. Escolha na lista ou toque no mapa.", true);
+    $("gps").textContent = "Pegando sua localização...";
+    navigator.geolocation.getCurrentPosition(
+      p => { $("gps").textContent = "Usar minha localização"; buscar({lat: p.coords.latitude.toFixed(5), lon: p.coords.longitude.toFixed(5), agravo: agravo()}); },
+      () => { $("gps").textContent = "Usar minha localização"; App.aviso("Não foi possível pegar a localização. Escolha na lista ou toque no mapa.", true); },
+      {timeout: 10000, enableHighAccuracy: true});
+  });
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+})().catch(e => App.aviso(e.message, true));
+</script>
+</body>
+</html>

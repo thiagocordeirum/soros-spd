@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Soro · Painel estadual</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header></header>
+<main>
+  <section class="numeros" id="numeros"></section>
+  <section class="bloco">
+    <div class="cab"><h2>Estoque por unidade</h2>
+      <label style="flex-direction:row;align-items:center;gap:8px">Soro <select id="soro-painel" style="width:auto"></select></label></div>
+    <div class="tabela" id="painel"></div>
+    <p class="leve">Uso por mês: média das saídas para atendimento nos últimos 90 dias. "Dura" é o estoque dividido pelo uso.</p>
+  </section>
+  <section class="bloco">
+    <div class="cab"><h2>Por quantos meses o estoque dura</h2><span class="leve" id="dura-soro"></span></div>
+    <div id="dura"></div>
+  </section>
+  <section class="grade" id="graficos"></section>
+  <section class="bloco">
+    <div class="cab"><h2>Soro perto de vencer</h2><span class="leve">mandar para onde o estoque dura menos</span></div>
+    <div class="tabela" id="vencendo"></div>
+  </section>
+  <section class="bloco">
+    <div class="cab"><h2>Postos críticos</h2><span class="leve">quantas comunidades ficariam a mais de 6 h do soro se o posto ficasse sem</span></div>
+    <form id="f-criticos" class="campos" style="align-items:end">
+      <label>Soro<select id="cr-soro"></select></label>
+      <label>Processos em paralelo<select id="cr-proc"><option>1</option><option>2</option><option selected>4</option><option>8</option></select></label>
+      <button class="botao" type="submit">Calcular</button>
+    </form>
+    <div id="criticos"></div>
+  </section>
+  <section id="vigilancia" class="grade"></section>
+</main>
+<script src="app.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+let ultimoG = null;
+const desenharGraficos = () => { if (ultimoG) $("graficos").innerHTML = App.graficosGerais(ultimoG, {W: App.larguraBloco($("graficos"))}); };
+let painel = null;
+
+function desenharPainel() {
+  const soro = $("soro-painel").value;
+  $("painel").innerHTML = `<table><tr><th>Unidade</th><th>Nível</th><th class="d">Estoque</th><th class="d">Uso/mês</th><th class="d">Dura</th><th class="d">A caminho</th><th>Último dado</th></tr>
+    ${painel.unidades.map(u => { const s = u.soros.find(x => x.soro === soro);
+      if (!s) return "";
+      const curto = s.dura_meses !== null && s.dura_meses < 2;
+      return `<tr><td>${App.esc(u.nome)}</td><td>${u.nivel}</td><td class="d num">${s.estoque}</td><td class="d num">${String(s.uso_mes).replace(".", ",")}</td>
+        <td class="d num" style="${curto ? "color:var(--ferrugem);font-weight:700" : ""}">${s.dura_meses === null ? "-" : String(s.dura_meses).replace(".", ",") + " meses"}</td>
+        <td class="d num">${u.a_caminho || "-"}</td><td>${App.etiquetaIdade(u.atualizado_ha_s)}</td></tr>`; }).join("")}</table>`;
+  // Mesmo soro escolhido acima. Abaixo de 2 meses a unidade precisa de reposição.
+  const linhas = painel.unidades.map(u => ({u, s: u.soros.find(x => x.soro === soro)})).filter(x => x.s && x.u.nivel !== "estado")
+    .map(({u, s}) => ({rotulo: u.nome, vazio: s.dura_meses === null ? "sem uso nos últimos 90 dias" : "",
+      segs: [{nome: "dura", valor: s.dura_meses || 0, cor: App.corSoro(soro)}]}));
+  $("dura-soro").textContent = App.soro(soro) + ". Escala até 12 meses; a seta indica barra cortada.";
+  $("dura").innerHTML = linhas.length ? `<div class="grafico">${App.barras({linhas, unidade: "meses", ref: {valor: 2, rotulo: "2 meses"}, teto: 12, W: App.larguraBloco($("dura"), false)})}</div>`
+    : '<p class="vazio">Nenhuma unidade trabalha com este soro.</p>';
+}
+
+async function carregar() {
+  const [p, vig, g] = await Promise.all([App.api("/api/painel"), App.api("/api/vigilancia"), App.api("/api/graficos")]);
+  ultimoG = g;
+  desenharGraficos();
+  painel = p;
+  const total = p.unidades.reduce((a, u) => a + u.total, 0);
+  const velhas = p.unidades.filter(u => u.atualizado_ha_s === null || u.atualizado_ha_s > 6 * 3600).length;
+  $("numeros").innerHTML = `
+    <div class="numero"><span class="leve">Ampolas no estado</span><b class="num">${total}</b></div>
+    <div class="numero"><span class="leve">Unidades com dado de mais de 6 h</span><b class="num">${velhas}</b></div>
+    <div class="numero"><span class="leve">Lotes vencendo em 60 dias</span><b class="num">${p.vencendo.length}</b></div>
+    <div class="numero"><span class="leve">Alertas de surto</span><b class="num">${p.alertas.length}</b></div>`;
+  desenharPainel();
+  $("vencendo").innerHTML = p.vencendo.length ? `<table><tr><th>Unidade</th><th>Lote</th><th class="d">Ampolas</th><th>Vence</th><th>Sugestão</th><th></th></tr>
+    ${p.vencendo.map(l => `<tr><td>${App.esc(l.nome)}</td><td>${App.esc(l.lote)} (${l.soro})</td><td class="d num">${l.qtd}</td>
+      <td><span class="etq aviso">em ${l.vence_em_dias} dias</span></td>
+      <td>${l.sugestao ? `${l.sugestao.qtd} amp. para ${App.esc(l.sugestao.nome)}, onde o estoque dura ${String(l.sugestao.dura_meses).replace(".", ",")} meses` : "nenhuma unidade com consumo e espaço"}</td>
+      <td>${l.sugestao && l.unidade === App.info.id ? `<button class="botao peq" data-d="${l.sugestao.para}" data-s="${l.soro}" data-q="${l.sugestao.qtd}">Remanejar</button>` : ""}</td></tr>`).join("")}</table>`
+    : '<p class="vazio">Nenhum lote vence nos próximos 60 dias.</p>';
+  $("vigilancia").innerHTML = vig.map(v => `<div class="bloco ${v.alertas.length ? "aviso" : ""}">
+      <div class="cab"><h2>${App.esc(v.regiao)}</h2><span class="etq ${v.alertas.length ? "aviso" : "ok"}">${v.alertas.length ? "surto" : "normal"}</span></div>
+      <div class="grafico">${App.grafico(v.serie)}</div></div>`).join("");
+}
+
+(async () => {
+  const i = await App.cabecalho("estado.html");
+  const op = Object.entries(i.soros).map(([k, n]) => `<option value="${k}">${App.esc(n)}</option>`).join("");
+  $("soro-painel").innerHTML = op;
+  $("cr-soro").innerHTML = op;
+  $("soro-painel").addEventListener("change", desenharPainel);
+  App.aoRedimensionar(() => { if (painel) desenharPainel(); desenharGraficos(); });
+  document.querySelector("main").addEventListener("click", async e => {
+    const b = e.target.closest("button[data-d]");
+    if (!b) return;
+    try {
+      await App.api("/api/remessas", {destino: b.dataset.d, soro: b.dataset.s, qtd: +b.dataset.q});
+      App.aviso("Remanejamento registrado.");
+      carregar();
+    } catch (err) { App.aviso(err.message, true); }
+  });
+  $("f-criticos").addEventListener("submit", async e => {
+    e.preventDefault();
+    $("criticos").innerHTML = '<p class="vazio">Calculando...</p>';
+    try {
+      const r = await App.api(`/api/criticos?soro=${$("cr-soro").value}&processos=${$("cr-proc").value}`);
+      $("criticos").innerHTML = `<table><tr><th>Unidade</th><th class="d">Comunidades que passariam de ${r.limite_horas} h</th></tr>
+        ${r.postos.map(p => `<tr><td>${App.esc(p.nome)}</td><td class="d num">${p.comunidades}</td></tr>`).join("")}</table>
+        <p class="leve">Calculado com ${r.processos} processo(s) em ${r.segundos} s. Neste mapa pequeno o paralelismo não compensa; o ganho aparece em mapas grandes (ver <code>python -m soro speedup</code>).</p>`;
+    } catch (err) { App.aviso(err.message, true); }
+  });
+  await carregar();
+  setInterval(carregar, 15000);
+})().catch(e => App.aviso(e.message, true));
+</script>
+</body>
+</html>
