@@ -4,18 +4,18 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Soro · Início</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap">
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
 <header></header>
 <main>
-  <section class="numeros" id="numeros"></section>
   <section class="grade">
     <div class="bloco" id="alertas"><h2>Alertas de surto</h2><p class="vazio">Carregando...</p></div>
     <div class="bloco">
-      <h2>O que dá para fazer aqui</h2>
-      <div id="atalhos" class="campos"></div>
-      <p class="leve">Este nó guarda uma cópia dos dados e continua funcionando mesmo se a secretaria ou o polo sair do ar.</p>
+      <h2>Como funciona</h2>
+      <div class="lista" id="como"></div>
     </div>
   </section>
 </main>
@@ -24,21 +24,23 @@
 (async () => {
   const i = await App.cabecalho("index.html");
   const [est, alertas, cont] = await Promise.all([App.api("/api/estoque"), App.api("/api/alertas"), App.api("/api/contagem")]);
-  document.getElementById("numeros").innerHTML = `
-    <div class="numero"><span class="leve">Ampolas aqui</span><b class="num">${est.total}</b></div>
-    <div class="numero"><span class="leve">Espaço livre na geladeira</span><b class="num">${est.livre}</b></div>
-    <div class="numero"><span class="leve">Remessas chegando</span><b class="num">${est.a_caminho.length}</b></div>
-    <div class="numero"><span class="leve">Casos conhecidos na rede</span><b class="num">${cont.casos}</b></div>`;
+  const acoes = [];
+  if (i.nivel !== "estado") acoes.push({icone: "frasco", rotulo: "Atender", href: "posto.html#f-caso"}, {icone: "estoque", rotulo: "Estoque", href: "posto.html#estoque", cor: "azul"});
+  if (i.nivel === "polo") acoes.push({icone: "caminhao", rotulo: "Repor postos", href: "polo.html", cor: "ambar"});
+  if (i.nivel === "estado") acoes.push({icone: "painel", rotulo: "Painel", href: "estado.html"}, {icone: "alerta", rotulo: "Vencendo", href: "estado.html#vencendo", cor: "ambar"});
+  acoes.push({icone: "pin", rotulo: "Onde tem soro", href: "usuario.html", cor: "laranja"}, {icone: "rede", rotulo: "Rede", href: "rede.html", cor: "azul"});
+  App.hero({rotulo: "Estoque desta unidade", titulo: `${App.milhar(est.total)} ampolas`,
+    texto: `*${est.livre} lugares livres* na geladeira, ${est.a_caminho.length ? `*${est.a_caminho.length} remessa(s)* chegando` : "nenhuma remessa chegando"} e *${App.milhar(cont.casos)} casos* conhecidos na rede.`,
+    acoes: acoes.slice(0, 4)});
   document.getElementById("alertas").innerHTML = "<h2>Alertas de surto</h2>" + (alertas.length
-    ? alertas.map(a => `<div class="bloco aviso"><h3>Surto no ${App.esc(a.regiao)}</h3>
-        <p>${a.observado} casos em ${App.data(a.dia)}; o normal da região fica abaixo de ${String(a.limiar).replace(".", ",")}.</p></div>`).join("")
+    ? `<div class="lista">${alertas.map(a => `<div class="item"><span class="ic laranja">${App.icone("sino")}</span>
+        <p><b>Surto no ${App.esc(a.regiao)}</b><br><span class="leve">${a.observado} casos em ${App.data(a.dia)}; o normal da região fica abaixo de ${String(a.limiar).replace(".", ",")}.</span></p></div>`).join("")}</div>`
     : `<p class="vazio">Nenhum alerta ativo.</p>`);
-  const atalhos = [];
-  if (i.nivel !== "estado") atalhos.push(["posto.html", "Registrar atendimento e ver estoque"]);
-  if (i.nivel === "polo") atalhos.push(["polo.html", "Repor os postos da região"]);
-  if (i.nivel === "estado") atalhos.push(["estado.html", "Ver o estoque do estado"]);
-  atalhos.push(["usuario.html", "Achar o posto mais próximo com soro"], ["rede.html", "Ver a sincronização"]);
-  document.getElementById("atalhos").innerHTML = atalhos.map(([h, t]) => `<a class="botao" href="${h}" style="text-decoration:none;text-align:center">${t}</a>`).join("");
+  document.getElementById("como").innerHTML = [
+    ["rede", "", "Este nó guarda uma cópia dos dados e continua funcionando se a secretaria ou o polo sair do ar."],
+    ["sincronizar", "azul", "A cada 2 segundos ele troca o que há de novo com as unidades vizinhas."],
+    ["relogio", "ambar", "Toda informação de outra unidade mostra há quanto tempo chegou."],
+  ].map(([ic, cor, t]) => `<div class="item"><span class="ic ${cor}">${App.icone(ic)}</span><p>${t}</p></div>`).join("");
 })().catch(e => App.aviso(e.message, true));
 </script>
 </body>

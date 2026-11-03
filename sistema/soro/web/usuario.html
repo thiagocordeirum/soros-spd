@@ -3,89 +3,95 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#10302C">
+<meta name="theme-color" content="#E5EEEA">
 <meta name="description" content="Onde tem soro antiveneno mais perto e como chegar.">
 <title>Onde tem soro</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icone.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap">
 <link rel="stylesheet" href="app.css">
 <!-- Leaflet e OpenStreetMap: gratuitos, sem chave. Sem internet, a página usa o mapa esquemático. -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <style>
-main{max-width:1100px;gap:16px}
-.cidadao .equipe{color:var(--sobre-verde2);font-size:13px}
-.ligar{display:grid;grid-template-columns:2fr 1fr;gap:10px}
-.ligar a{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:64px;border-radius:14px;text-decoration:none;font-weight:800;font-size:20px;background:#B3261E;color:#fff}
-.ligar a small{font-size:13px;font-weight:600;opacity:.9}
-.ligar a.sec{background:var(--cartao);color:var(--tinta);border:1.5px solid var(--linha);font-size:18px}
-.passo-t{font-size:15px;font-weight:700}
-.animais{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
-.animais label{flex-direction:row;align-items:center;justify-content:center;min-height:56px;border:1.5px solid var(--linha);border-radius:12px;background:var(--sup);color:var(--tinta);font-size:15px;font-weight:700;cursor:pointer;text-align:center;padding:8px}
+main{gap:16px}
+main>*,.hero{max-width:1100px}
+.hero-botao.emergencia{color:#B3261E}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.animais label.atalho{flex-basis:170px}
 .animais input{position:absolute;opacity:0;width:1px;height:1px}
-.animais label:has(input:checked){background:var(--ok);border-color:var(--ok);color:var(--cartao)}
+.animais label:has(input:checked){background:var(--t-verde-f);box-shadow:inset 0 0 0 2px var(--verde),var(--sombra-ladrilho)}
 .animais label:has(input:focus-visible){outline:3px solid var(--laranja);outline-offset:2px}
-.grande{min-height:56px;font-size:17px;width:100%;background:var(--ok);color:var(--cartao)}
+.grande{min-height:58px;font-size:17px;width:100%;display:flex;align-items:center;justify-content:center;gap:10px}
 .ou{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end}
-.privado{font-size:12px;color:var(--tinta3)}
-.abas{display:none;gap:6px}
-.abas button{flex:1;min-height:44px;border-radius:10px;border:1.5px solid var(--linha);background:var(--cartao);color:var(--tinta);font-weight:700}
-.abas button[aria-selected="true"]{background:var(--ok);border-color:var(--ok);color:var(--cartao)}
+.privado{font-size:12.5px;color:var(--tinta3)}
 .saida{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);gap:16px;align-items:start}
 #painel-lista{display:flex;flex-direction:column;gap:12px}
-#mapa.real{height:460px;border-radius:10px;overflow:hidden}
-.destino{cursor:pointer;gap:8px}
-.destino.sel{border:2px solid var(--ok)}
-.destino .horas{font-size:24px;font-weight:800}
-.destino .horas.longe{color:var(--ferrugem)}
+#mapa.real{height:480px;border-radius:var(--r-md);overflow:hidden}
+.destino{cursor:pointer;gap:10px;box-shadow:none;border-radius:var(--r-md)}
+.destino.sel{box-shadow:inset 0 0 0 2px var(--verde)}
+.dest-cab{display:flex;align-items:center;gap:12px}
+.dest-cab .ic{width:44px;height:44px;border-radius:13px}
+.dest-cab div{flex:1;min-width:0}
+.dest-cab small{display:block;color:var(--tinta3);font-size:13px;line-height:1.3}
+.horas{font-size:15px;font-weight:800;border-radius:999px;padding:6px 12px;background:var(--t-verde-f);color:var(--t-verde);white-space:nowrap}
+.horas.longe{background:var(--t-laranja-f);color:var(--t-laranja)}
 .estab{font-size:14px;color:var(--tinta2)}
 .acoes{display:flex;flex-wrap:wrap;gap:8px}
-.acoes a{text-decoration:none;min-height:40px;display:inline-flex;align-items:center}
-.offline{background:var(--aviso-fundo);border:1px solid var(--aviso-linha);border-radius:10px;padding:10px 12px;font-size:14px}
-details.socorro summary{cursor:pointer;font-weight:700}
+.acoes a{text-decoration:none;min-height:40px;display:inline-flex;align-items:center;gap:6px}
+.acoes a svg.i{width:17px;height:17px}
+.offline{background:var(--aviso-fundo);border:1px solid var(--aviso-linha);border-radius:var(--r-sm);padding:10px 12px;font-size:14px}
+details.socorro summary{cursor:pointer;font-weight:700;display:flex;align-items:center;gap:12px;list-style:none}
+details.socorro summary::-webkit-details-marker{display:none}
 details.socorro ul{margin:8px 0 0;padding-left:20px;display:flex;flex-direction:column;gap:4px}
+.cidadao-nav{display:none}
+.topo.cidadao h1{white-space:normal}
 @media (max-width:760px){
-  .abas{display:flex;position:sticky;top:0;z-index:5;background:var(--fundo);padding:6px 0}
   .saida{grid-template-columns:1fr}
   .saida[data-aba="lista"] #painel-mapa,.saida[data-aba="mapa"] #painel-lista{display:none}
-  #mapa.real{height:65vh}
+  #mapa.real{height:62vh}
   .ou{grid-template-columns:1fr}
+  .animais label.atalho{flex-basis:calc((100% - 24px)/3)}
+  .cidadao-nav{display:grid}
+  .topo.cidadao .sinc{width:auto;border-radius:999px;padding:0 18px}
+  .cidadao-nav>*{display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 2px;font:inherit;font-size:11px;font-weight:700;
+    color:var(--tinta3);background:none;border:0;border-radius:18px;text-decoration:none;cursor:pointer}
+  .cidadao-nav [aria-selected="true"]{color:var(--verde)}
+  .cidadao-nav .fab{background:#B3261E;font-size:13px;box-shadow:0 0 0 5px var(--cartao),0 12px 26px rgba(179,38,30,.4)}
 }
 </style>
 </head>
 <body>
 <header></header>
+<section class="hero" id="topo">
+  <div class="hero-card"><small>Foi picado? Procure atendimento</small><h2>Onde tem soro</h2>
+    <div class="hero-botoes"><a class="hero-botao emergencia" href="tel:192"><span data-ic="telefone"></span>Ligar 192</a>
+      <a class="hero-quadrado" href="tel:193" title="Bombeiros">193</a></div></div>
+</section>
 <main>
-  <section class="ligar" aria-label="Emergência">
-    <a href="tel:192">Ligar 192<small>SAMU</small></a>
-    <a href="tel:193" class="sec">193<small>Bombeiros</small></a>
+  <section class="abertura">
+    <p class="frase">Escolha o <b>animal</b> e diga <b>onde você está</b>. Mostramos o lugar mais rápido de alcançar que tem o soro certo, de barco, voadeira ou estrada.</p>
+    <fieldset class="atalhos animais" id="animais"><legend class="sr">O que picou?</legend></fieldset>
   </section>
 
   <section class="bloco">
     <form id="f-busca">
-      <fieldset style="border:0;padding:0;margin:0;display:flex;flex-direction:column;gap:8px">
-        <legend class="passo-t" style="margin-bottom:8px">O que picou?</legend>
-        <div class="animais" id="animais"></div>
-      </fieldset>
-      <p class="passo-t" style="margin-top:6px">Onde você está?</p>
-      <button class="botao grande" type="button" id="gps">Usar minha localização</button>
+      <h2>Onde você está?</h2>
+      <button class="botao grande" type="button" id="gps"><span id="ic-gps"></span><span id="gps-txt">Usar minha localização</span></button>
       <div class="ou">
         <label>ou escolha na lista<select id="local"></select></label>
-        <button class="botao sec" type="submit" style="min-height:44px">Buscar</button>
+        <button class="botao sec" type="submit" style="min-height:46px">Buscar</button>
       </div>
       <p class="privado">Você também pode tocar no mapa onde está. A localização serve só para achar o lugar mais perto e não fica guardada.</p>
     </form>
   </section>
 
-  <div class="abas" role="tablist" aria-label="Ver resultado">
-    <button type="button" role="tab" aria-selected="true" data-aba="lista">Lista</button>
-    <button type="button" role="tab" aria-selected="false" data-aba="mapa">Mapa</button>
-  </div>
   <section class="saida" data-aba="lista">
     <div id="painel-lista">
       <div class="bloco" id="resultado"><p class="vazio">Escolha o animal e diga onde você está.</p></div>
-      <details class="bloco socorro">
-        <summary>O que fazer até chegar ao atendimento</summary>
+      <details class="bloco socorro" id="socorro">
+        <summary><span class="ic laranja" id="ic-socorro"></span>O que fazer até chegar ao atendimento</summary>
         <ul>
           <li>Lave o local da picada com água e sabão.</li>
           <li>Deixe a pessoa deitada e calma. Evite que ela ande ou corra.</li>
@@ -101,6 +107,13 @@ details.socorro ul{margin:8px 0 0;padding-left:20px;display:flex;flex-direction:
       <p class="leve" id="legenda-mapa"></p></div>
   </section>
 </main>
+<nav class="nav cidadao-nav" aria-label="Atalhos">
+  <button type="button" data-ir="topo"><span data-ic="busca"></span>Buscar</button>
+  <button type="button" data-aba="lista" aria-selected="true"><span data-ic="lista"></span>Lista</button>
+  <a class="fab" href="tel:192"><span data-ic="telefone"></span>192</a>
+  <button type="button" data-aba="mapa" aria-selected="false"><span data-ic="mapa"></span>Mapa</button>
+  <button type="button" data-ir="socorro"><span data-ic="socorro"></span>Socorro</button>
+</nav>
 <script src="app.js"></script>
 <script>
 const $ = id => document.getElementById(id);
@@ -210,7 +223,7 @@ $("mapa").addEventListener("click", e => {
 function telefone(t) {
   const n = String(t || "").replace(/\D/g, "");
   if (n.length < 10 || n.length > 11) return "";
-  return `<a class="botao sec peq" href="tel:+55${n}">Ligar (${n.slice(0, 2)}) ${n.slice(2, -4)}-${n.slice(-4)}</a>`;
+  return `<a class="botao sec peq" href="tel:+55${n}">${App.icone("telefone")}Ligar (${n.slice(0, 2)}) ${n.slice(2, -4)}-${n.slice(-4)}</a>`;
 }
 
 function mostrar(r, voce, offline = null) {
@@ -225,13 +238,15 @@ function mostrar(r, voce, offline = null) {
   $("resultado").innerHTML = `${aviso}<h2>Saindo de ${App.esc(r.origem_nome)}</h2>${perto}
     <p class="leve">Lugares com pelo menos ${r.minimo} ampolas do soro, do mais rápido ao mais lento. Toque num lugar para ver o caminho no mapa.</p>` + r.destinos.map((d, i) => `
     <div class="bloco destino ${i === 0 ? "sel" : ""}" data-i="${i}" tabindex="0" role="button" aria-label="Ver caminho até ${App.esc(d.nome)} no mapa">
-      <div class="cab"><h3>${App.esc(d.nome)}</h3><span class="horas num ${d.acima_do_limite ? "longe" : ""}">${App.num(d.horas)} h</span></div>
-      ${d.estabelecimento ? `<p class="estab"><b>${App.esc(d.estabelecimento.nome)}</b><br>${App.esc(d.estabelecimento.endereco || "")}</p>` : ""}
+      <div class="dest-cab"><span class="ic ${i === 0 ? "" : "azul"}">${App.icone("hospital")}</span>
+        <div><h3>${App.esc(d.nome)}</h3>${d.estabelecimento ? `<small>${App.esc(d.estabelecimento.nome)}</small>` : ""}</div>
+        <span class="horas num ${d.acima_do_limite ? "longe" : ""}">${App.num(d.horas)} h</span></div>
+      ${d.estabelecimento?.endereco ? `<p class="estab">${App.esc(d.estabelecimento.endereco)}</p>` : ""}
       <ol class="passos">${d.trajeto.length ? d.trajeto.map(p => `<li>${App.esc(p.de_nome)} até ${App.esc(p.para_nome)} de ${p.modal} (${App.num(p.horas)} h)</li>`).join("") : "<li>Você já está aqui.</li>"}</ol>
       <p class="leve">Soro: ${Object.entries(d.estoque).filter(([, q]) => q > 0).map(([s, q]) => `${App.soro(s)} (${q} amp.)`).join(", ")}.
         Estoque informado ${App.idade(d.atualizado_ha_s)}.${d.acima_do_limite ? " Mais de 6 horas de viagem: procure orientação pelo 192." : ""}</p>
       <div class="acoes">
-        <a class="botao sec peq" href="https://www.google.com/maps/dir/?api=1&destination=${d.lat},${d.lon}" target="_blank" rel="noopener">Abrir no Google Maps</a>
+        <a class="botao sec peq" href="https://www.google.com/maps/dir/?api=1&destination=${d.lat},${d.lon}" target="_blank" rel="noopener">${App.icone("mapa")}Abrir no Google Maps</a>
         ${telefone(d.estabelecimento?.telefone)}
       </div>
     </div>`).join("") + `<p class="leve">Endereço e telefone: CNES, Ministério da Saúde. O Google Maps só traça caminho por estrada; use para chegar à unidade dentro da cidade.</p>`;
@@ -254,7 +269,7 @@ async function buscar(params, aba = "lista") {
   $("resultado").innerHTML = '<p class="vazio">Buscando...</p>';
   trocarAba(aba);
   // No celular o resultado fica abaixo do formulário: rola até ele.
-  if (matchMedia("(max-width:760px)").matches) document.querySelector(".abas").scrollIntoView({behavior: "smooth"});
+  if (matchMedia("(max-width:760px)").matches) document.querySelector(".saida").scrollIntoView({behavior: "smooth"});
   try {
     const r = await App.api("/api/onde-tem-soro?" + new URLSearchParams(params));
     const quando = new Date().toLocaleString("pt-BR", {dateStyle: "short", timeStyle: "short"});
@@ -270,7 +285,7 @@ async function buscar(params, aba = "lista") {
 
 function trocarAba(aba) {
   document.querySelector(".saida").dataset.aba = aba;
-  document.querySelectorAll(".abas button").forEach(b => b.setAttribute("aria-selected", String(b.dataset.aba === aba)));
+  document.querySelectorAll(".cidadao-nav [data-aba]").forEach(b => b.setAttribute("aria-selected", String(b.dataset.aba === aba)));
   if (aba === "mapa" && mapa) setTimeout(() => { mapa.invalidateSize(); desenharMapa(...ultimoDesenho); }, 50);
 }
 
@@ -280,20 +295,33 @@ function trocarAba(aba) {
   $("local").innerHTML = [...geo.localidades].sort((a, b) => a.nome.localeCompare(b.nome))
     .map(l => `<option value="${l.id}">${App.esc(l.nome)}</option>`).join("");
   $("local").value = App.info.local;
-  $("animais").innerHTML = [...Object.entries(App.info.agravos).map(([k, a]) => [k, a.nome.replace(/^Cobra: /, "Cobra ")]), ["", "Não sei"]]
-    .map(([k, n], i) => `<label><input type="radio" name="agravo" value="${k}" ${i === 0 ? "checked" : ""}><span>${App.esc(n)}</span></label>`).join("");
+  const VISUAL = {botropico: ["cobra", ""], laquetico: ["cobra", "ambar"], elapidico: ["cobra", "laranja"], escorpionico: ["escorpiao", "azul"]};
+  $("animais").insertAdjacentHTML("beforeend", [...Object.entries(App.info.agravos).map(([k, a]) => [k, a.nome.replace(/^Cobra: /, "")]), ["", "Não sei"]]
+    .map(([k, n], i) => { const [ic, cor] = VISUAL[k] || ["duvida", ""];
+      return `<label class="atalho"><input type="radio" name="agravo" value="${k}" ${i === 0 ? "checked" : ""}>
+        <span class="ic ${cor}">${App.icone(ic)}</span><span>${App.esc(n[0].toUpperCase() + n.slice(1))}</span></label>`; }).join(""));
   desenharMapa();
-  document.querySelectorAll(".abas button").forEach(b => b.addEventListener("click", () => trocarAba(b.dataset.aba)));
+  document.querySelectorAll(".cidadao-nav [data-aba]").forEach(b => b.addEventListener("click", () => {
+    trocarAba(b.dataset.aba);
+    document.querySelector(".saida").scrollIntoView({behavior: "smooth"});
+  }));
+  document.querySelectorAll(".cidadao-nav [data-ir]").forEach(b => b.addEventListener("click", () => {
+    const alvo = $(b.dataset.ir);
+    if (alvo.tagName === "DETAILS") { alvo.open = true; trocarAba("lista"); }
+    alvo.scrollIntoView({behavior: "smooth"});
+  }));
+  document.querySelectorAll("[data-ic]").forEach(el => { el.innerHTML = App.icone(el.dataset.ic); });
+  $("ic-gps").innerHTML = App.icone("pin"); $("ic-socorro").innerHTML = App.icone("socorro");
   $("f-busca").addEventListener("submit", e => {
     e.preventDefault();
     buscar({local: $("local").value, agravo: agravo()});
   });
   $("gps").addEventListener("click", () => {
     if (!navigator.geolocation) return App.aviso("Este navegador não informa a localização. Escolha na lista ou toque no mapa.", true);
-    $("gps").textContent = "Pegando sua localização...";
+    $("gps-txt").textContent = "Pegando sua localização...";
     navigator.geolocation.getCurrentPosition(
-      p => { $("gps").textContent = "Usar minha localização"; buscar({lat: p.coords.latitude.toFixed(5), lon: p.coords.longitude.toFixed(5), agravo: agravo()}); },
-      () => { $("gps").textContent = "Usar minha localização"; App.aviso("Não foi possível pegar a localização. Escolha na lista ou toque no mapa.", true); },
+      p => { $("gps-txt").textContent = "Usar minha localização"; buscar({lat: p.coords.latitude.toFixed(5), lon: p.coords.longitude.toFixed(5), agravo: agravo()}); },
+      () => { $("gps-txt").textContent = "Usar minha localização"; App.aviso("Não foi possível pegar a localização. Escolha na lista ou toque no mapa.", true); },
       {timeout: 10000, enableHighAccuracy: true});
   });
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});

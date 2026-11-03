@@ -62,11 +62,15 @@ def iniciar_processo(uid: str, args) -> subprocess.Popen:
     return subprocess.Popen(cmd, cwd=RAIZ, env=env)
 
 
+# Sem proxy: o nó está nesta máquina, e um HTTP_PROXY no ambiente faria a resposta vir de outro lugar.
+DIRETO = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+
 def esperar_no(url: str, tempo_limite: float = 15.0) -> None:
     fim = time.time() + tempo_limite
     while time.time() < fim:
         try:
-            urllib.request.urlopen(f"{url}/api/info", timeout=1).read()
+            DIRETO.open(f"{url}/api/info", timeout=1).read()
             return
         except OSError:
             time.sleep(0.2)
@@ -74,9 +78,13 @@ def esperar_no(url: str, tempo_limite: float = 15.0) -> None:
 
 
 def porta_ocupada(host: str, porta: int) -> bool:
+    # Tenta ocupar a porta do mesmo jeito que o nó faria; se não der, outro processo está nela.
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.settimeout(0.5)
-        return s.connect_ex((host, porta)) == 0
+        try:
+            s.bind((host, porta))
+            return False
+        except OSError:
+            return True
 
 
 def cmd_rede(args):

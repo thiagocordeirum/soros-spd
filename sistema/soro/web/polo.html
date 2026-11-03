@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Soro · Painel do polo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap">
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
@@ -58,6 +60,10 @@ async function carregar() {
   const [sug, rem, painel, vig, g] = await Promise.all([App.api("/api/sugestoes"), App.api("/api/remessas"),
     App.api("/api/painel"), App.api("/api/vigilancia"), App.api("/api/graficos")]);
   sugestoes = sug;
+  const envios = sug.filter(s => s.sugestao > 0).length;
+  App.heroTexto(`${envios} envio${envios === 1 ? "" : "s"} sugerido${envios === 1 ? "" : "s"}`,
+    `*${rem.pedidos_recebidos.length} pedido(s)* dos postos em aberto e *${rem.enviadas.length} remessa(s)* a caminho. `
+    + (vig.some(v => v.alertas.length) ? "Há *alerta de surto* na região." : "Sem alerta de surto na região."));
   desenharAlvos();
   ultimoG = g;
   desenharGraficos();
@@ -89,6 +95,9 @@ async function carregar() {
 
 (async () => {
   const i = await App.cabecalho("polo.html");
+  App.hero({rotulo: "Painel do polo · " + (i.regiao || ""), titulo: "...", texto: "", acoes: [
+    {icone: "caminhao", rotulo: "Reposição", href: "#sugestoes"}, {icone: "painel", rotulo: "Estoque e alvo", href: "#alvos", cor: "azul"},
+    {icone: "pedido", rotulo: "Pedidos", href: "#pedidos", cor: "ambar"}, {icone: "sino", rotulo: "Surto", href: "#vigilancia", cor: "laranja"}]});
   $("soro-alvo").innerHTML = Object.entries(i.soros).map(([k, n]) => `<option value="${k}">${App.esc(n)}</option>`).join("");
   $("soro-alvo").addEventListener("change", desenharAlvos);
   App.aoRedimensionar(() => { desenharAlvos(); desenharGraficos(); });
