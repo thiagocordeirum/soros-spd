@@ -26,24 +26,23 @@ comunidades são ilustrativos.
 | Id | Requisito | Onde está |
 |---|---|---|
 | RF01 | Cada unidade registra e consulta seus dados mesmo que as outras estejam fora do ar | `no.py`, `servidor.py` |
-| RF02 | A unidade sincroniza sozinha com as vizinhas e também quando o usuário pede | `sincronizacao.py`, tela Rede |
-| RF03 | Toda informação de outra unidade mostra há quanto tempo foi atualizada | `diario.py` (contatos), todas as telas |
+| RF02 | A unidade sincroniza sozinha com as vizinhas e também quando o usuário pede | `sincronizacao.py`, `/api/sincronizar` |
+| RF03 | Toda informação de outra unidade mostra há quanto tempo foi atualizada | `diario.py` (contatos), respostas da API |
 | RF04 | A rede de qualquer estado é descrita num arquivo: níveis, quem abastece quem, vizinhos, capacidade da geladeira, estoque-alvo, código CNES e mapa; nome, endereço, telefone e coordenadas vêm do CNES | `config.py`, `cnes.py`, `redes/*.json` |
 | RF05 | Estoque por lote com validade; a saída usa o lote que vence antes; lote vencido não sai | `No.lotes`, `No._baixar` |
 | RF06 | Soro perto de vencer gera aviso com sugestão de para onde remanejar | `No.vencimentos`, painel estadual |
-| RF07 | O posto pede soro ao seu fornecedor | `No.pedir`, tela do posto |
+| RF07 | O posto pede soro ao seu fornecedor | `No.pedir`, `/api/pedidos` |
 | RF08 | Remessa entre unidades: o que está a caminho conta como estoque do destino, a remessa não passa do espaço livre do destino e o destino confirma o recebimento, informando divergência | `No.enviar_remessa`, `No.receber_remessa` |
 | RF09 | O fornecedor recebe uma sugestão de quanto mandar para cada unidade que abastece | `No.sugestoes`, painel do polo |
 | RF10 | Registro de atendimento sem dados pessoais, com baixa automática do soro; reenviar o mesmo atendimento não duplica | `No.atender` |
 | RF11 | Polo e secretaria detectam aumento anormal de casos por região e emitem alerta para a região | `surto.py`, `No.vigiar` |
-| RF12 | Painel estadual com estoque, uso por mês, duração do estoque e idade do dado de cada unidade | `No.painel`, `estado.html` |
-| RF13 | O cidadão vê o caminho até o lugar mais rápido de alcançar que tem o soro, informando onde está pela lista, pela posição do celular ou tocando no mapa; a tela funciona no celular e pode ser instalada | `rotas.py`, `usuario.html`, `sw.js` |
+| RF12 | Painel estadual com estoque, uso por mês, duração do estoque e idade do dado de cada unidade | `No.painel`, `/api/painel` |
+| RF13 | A consulta pública retorna o caminho até as unidades com soro, ordenadas por tempo de viagem, a partir de uma localidade ou coordenadas | `rotas.py`, `/api/onde-tem-soro` |
 | RF14 | Cálculo de postos críticos em paralelo | `rotas.postos_criticos` |
-| RF15 | Gráficos de uso diário, atendimentos por tipo de acidente, vencimento por mês, duração do estoque e estoque contra o alvo | `No.graficos`, `app.js` |
+| RF15 | Gráficos de uso diário, atendimentos por tipo de acidente, vencimento por mês, duração do estoque e estoque contra o alvo | `No.graficos`, `/api/graficos` |
 | RF16 | Contas da equipe em três tipos (profissional de saúde, coordenação do polo, gestão estadual), cada um com suas permissões; login no nó da própria unidade, sem consultar outro nó; cada registro guarda quem o fez | `usuarios.py`, `No.cadastrar`, `No.autenticar`, `servidor.py` |
-| RF17 | O cidadão não tem conta; pode guardar no próprio celular um perfil opcional para mostrar à equipe | `perfil.html` |
 
-Ficam para depois: cadastro de unidades por tela, login e permissões, relatórios,
+Ficam para depois: cadastro de unidades pela API, relatórios,
 exportação para os sistemas oficiais e desenho dos trechos seguindo o curso dos rios.
 
 ### 2.2 Não funcionais
@@ -52,10 +51,10 @@ exportação para os sistemas oficiais e desenho dos trechos seguindo o curso do
 |---|---|---|
 | RNF01 | Disponibilidade: nenhuma operação de usuário espera outro nó | toda gravação é local; a sincronização roda em outra thread |
 | RNF02 | Convergência: nós que receberam os mesmos registros têm o mesmo estado | diário de eventos imutáveis + junção por união (seção 5) |
-| RNF03 | Nenhum registro perdido ou duplicado | vetor de versões, prefixo contínuo e id gerado no navegador |
-| RNF04 | Durabilidade: o que a tela confirmou está gravado em disco | SQLite em modo WAL, gravação antes da resposta |
+| RNF03 | Nenhum registro perdido ou duplicado | vetor de versões, prefixo contínuo e id gerado no cliente |
+| RNF04 | Durabilidade: o que a API confirmou está gravado em disco | SQLite em modo WAL, gravação antes da resposta |
 | RNF05 | Várias pessoas usando o mesmo nó ao mesmo tempo sem estoque negativo | servidor com uma thread por requisição + trava no nó + um único escritor por estoque |
-| RNF06 | Funciona numa rede local sem internet | FastAPI e uvicorn instalados uma vez (`requirements.txt`); as telas da equipe não usam recursos externos; a do cidadão cai para o mapa esquemático sem internet |
+| RNF06 | Funciona numa rede local sem internet | FastAPI e uvicorn instalados uma vez (`requirements.txt`); as operações da API não dependem de serviços externos |
 | RNF07 | A correção não depende de relógios sincronizados | a junção não usa horário; o relógio só aparece em estatísticas e na idade do dado |
 | RNF08 | O cálculo pesado ganha velocidade com mais processadores | `ProcessPoolExecutor` (seção 9) |
 | RNF09 | Privacidade: nenhum dado que identifique o paciente | o atendimento guarda só data, animal, gravidade, soro, ampolas e local |
@@ -88,11 +87,11 @@ Cada unidade da rede (secretaria, polo ou ponto de soro) é um nó: um processo 
 que pode rodar num computador do próprio local. O nó tem quatro partes:
 
 ```
-            navegador (profissional, gestor ou cidadão)
+                         cliente HTTP
                          |  HTTP
    +---------------------v----------------------+
    | FastAPI + uvicorn (rotas rodam em threads)  |
-   |    API JSON  |  páginas  |  /sync           |
+   |    API JSON             |  /sync           |
    +------+--------------------------+----------+
           |                          |
    +------v---------+        +-------v---------+      outros nós
@@ -168,7 +167,7 @@ Tipos de evento:
 
 `mov`, `caso`, `remessa`, `receb` e `pedido` levam também `por`, o login de quem fez.
 
-O estado que as telas mostram é calculado a partir dos eventos:
+O estado que a API retorna é calculado a partir dos eventos:
 
 * saldo de um lote numa unidade = soma de `qtd` dos `mov` daquela unidade e lote;
 * em trânsito = remessas sem `receb` correspondente;
@@ -184,7 +183,7 @@ que todos os nós calculam o mesmo estado quando têm os mesmos eventos.
 
 O nó guarda também uma tabela `contato` (unidade, instante mais recente conhecido). Ela é
 um registrador de máximo: na junção fica o maior valor. É daí que sai a idade da
-informação mostrada nas telas.
+informação retornada pela API.
 
 ## 5. Sincronização
 
@@ -250,8 +249,8 @@ Os pontos compartilhados são o diário (protegido por uma trava interna e pelo 
 nó (trava `No._trava` em atendimento, remessa, recebimento, entrada e perda). A
 sincronização e a vigilância são threads separadas que usam as mesmas travas.
 
-O atendimento recebe um `id` gerado no navegador. Se a mesma requisição chegar duas vezes,
-por exemplo quando a rede local falha e o navegador tenta de novo, o nó devolve o caso já
+O atendimento recebe um `id` gerado no cliente. Se a mesma requisição chegar duas vezes,
+por exemplo quando a rede local falha e o cliente tenta de novo, o nó devolve o caso já
 gravado e não dá baixa de novo no soro.
 
 ## 7. Funções
@@ -262,7 +261,7 @@ gravado e não dá baixa de novo no soro.
 2. O nó procura, entre os soros aceitos para o animal (RN03), o primeiro com saldo
    suficiente, ignorando lotes vencidos.
 3. Dá baixa lote a lote, do que vence antes ao que vence depois.
-4. Se nenhum soro tem saldo, o caso é gravado como não atendido e a tela mostra os três
+4. Se nenhum soro tem saldo, o caso é gravado como não atendido e a API retorna os três
    lugares mais rápidos de alcançar com soro, segundo a última informação de cada um.
 
 ### 7.2 Reposição
@@ -298,20 +297,14 @@ Como casos de postos isolados chegam atrasados, cada rodada reavalia hoje e os d
 anteriores. O id do alerta é `surto:<região>:<ano>-S<semana>`: se o polo e a secretaria
 detectarem o mesmo surto, os dois geram o mesmo id e o alerta aparece uma vez só.
 
-### 7.5 Onde tem soro (cidadão)
+### 7.5 Onde tem soro (consulta pública)
 
 O mapa é um grafo: localidades com coordenadas e trechos com tempo e meio de transporte.
-A rota é calculada com o algoritmo de Dijkstra a partir da localidade do usuário. Há três
-jeitos de dizer onde a pessoa está: escolher na lista, usar a posição do celular ou tocar no
-mapa. Nos dois últimos a página manda só a latitude e a longitude
-(`/api/onde-tem-soro?lat=&lon=`), e o servidor escolhe a localidade do mapa mais perto em
-linha reta e devolve essa distância. Se passar de 2 km, a tela avisa de qual ponto a busca
-partiu. O resultado lista os
-lugares com soro, do mais rápido ao mais lento, com o caminho passo a passo, o estoque e a
-idade da informação.
-
-Não há API externa de rota. As APIs comerciais de rota só conhecem estradas e não
-calculam trajetos por rio. A geolocalização é do próprio navegador.
+A rota é calculada com Dijkstra a partir da localidade informada em
+`/api/onde-tem-soro?local=`. A API também aceita `lat` e `lon`: nesse caso escolhe a
+localidade mais próxima em linha reta e retorna essa distância. Os resultados incluem
+os destinos ordenados pelo tempo de viagem, o trajeto, o estoque e a idade da informação.
+O cálculo usa o grafo configurado, sem depender de uma API externa de rotas.
 
 Cada unidade pode ter o código CNES do estabelecimento que guarda o soro. O comando
 `python -m soro cnes` (`cnes.py`) consulta a API de Dados Abertos do Ministério da Saúde
@@ -322,41 +315,16 @@ rodando, nenhum nó depende dela. Os códigos do exemplo vêm da lista oficial d
 estratégicos de soro do Amazonas; o do Polo Base Umariaçu foi achado pela busca de
 estabelecimentos de Tabatinga e não está naquela lista.
 
-O resultado da busca mostra o estabelecimento, o endereço, um link de ligação para o
-telefone e o link "Abrir no Google Maps" com as coordenadas do CNES. O link não precisa de
-chave; o mapa do Google embutido na página precisaria de chave com cobrança, e por isso não
-foi usado.
+A resposta da busca inclui os dados disponíveis do estabelecimento importados do CNES.
+O arquivo da rede guarda o tempo e o meio de transporte de cada trecho, sem a geometria
+do percurso dos rios.
 
-O mapa da tela usa Leaflet 1.9.4 (cdnjs) com o fundo do OpenStreetMap, ambos gratuitos e
-sem chave. Por cima do fundo aparecem as localidades, os pontos com soro, os trechos (linha
-tracejada para avião) e o caminho escolhido em laranja. Tocar num resultado mostra o
-caminho daquele destino. Quando a busca usa a posição do navegador, o mapa marca a pessoa e
-a liga à localidade mais próxima. Se a biblioteca não carregar por falta de internet, a
-página desenha um mapa esquemático em SVG com as mesmas informações. Os trechos são retas
-entre localidades, porque o arquivo da rede guarda só o tempo de cada trecho e não o
-percurso do rio.
+### 7.6 Indicadores
 
-A tela foi feita para celular. Tem botões grandes para ligar 192 e 193, escolha do animal
-por botões, abas Lista e Mapa em telas estreitas e as orientações de primeiro socorro do
-Ministério da Saúde. Ela é um aplicativo web instalável (PWA): `manifest.webmanifest`
-permite "Adicionar à tela inicial" e `sw.js` guarda a página e as últimas respostas da API.
-Sem conexão, a página abre e mostra a última busca com a data em que foi feita. Não há
-aplicativo nativo; o mesmo código serve para computador e celular.
-
-O navegador só libera a posição do celular e o service worker em HTTPS ou em `localhost`.
-Acessando o nó pelo IP da rede local, a busca pela lista e pelo toque no mapa funcionam,
-mas o botão de localização não.
-
-### 7.6 Gráficos
-
-Os painéis buscam `/api/graficos`, que resume os eventos das unidades que o nó acompanha:
-ampolas usadas por dia por soro (30 dias), atendimentos por região e tipo de acidente
-(30 dias) e ampolas que vencem por mês por soro (18 meses). O painel estadual também mostra
-por quantos meses o estoque de cada unidade dura, com a referência de 2 meses, e o do polo
-mostra o estoque de cada posto ao lado do estoque-alvo. Cada soro tem uma cor fixa, e cada
-tipo de acidente usa a cor do seu soro principal. As quatro cores foram conferidas para
-daltonismo nos temas claro e escuro. Todo gráfico tem uma tabela com os mesmos números
-("Ver os números") e mostra o valor ao passar o mouse ou focar com o teclado.
+`/api/graficos` resume os eventos das unidades que o nó acompanha: ampolas usadas por dia
+por soro (30 dias), atendimentos por região e tipo de acidente (30 dias) e ampolas que
+vencem por mês por soro (18 meses). `/api/painel` fornece estoque, consumo, duração
+estimada, estoque-alvo e idade dos dados das unidades acompanhadas.
 
 ### 7.7 Contas e permissões
 
@@ -374,12 +342,11 @@ porta. As rotas da equipe exigem sessão e, para mudar algo, a permissão do tip
 | cadastrar e desativar contas | | da sua região | todas |
 
 Ficam abertas a troca entre nós (`/sync`), `/api/info`, os contadores da sincronização e
-as rotas da tela do cidadão. Sem sessão a resposta é 401 e a tela leva ao login; sem
+as rotas de consulta pública de soro. Sem sessão a resposta é 401; sem
 permissão, 403. A conta criada na secretaria só vale num posto depois de chegar a ele pela
 sincronização, o que leva alguns segundos; desativar uma conta também se espalha assim.
 
-O cidadão não tem conta. O perfil opcional dele (`perfil.html`) fica no `localStorage` do
-celular e nunca é enviado a um nó.
+A consulta pública de soro não exige conta e não armazena perfil pessoal.
 
 ## 8. Persistência
 

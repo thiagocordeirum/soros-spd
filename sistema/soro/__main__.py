@@ -107,10 +107,9 @@ def cmd_rede(args):
         for p in procs.values():
             p.terminate()
         sys.exit(f"A rede não subiu: {erro}")
-    print("\nRede no ar. Abra no navegador:")
+    print("\nRede no ar. Endereços dos nós:")
     for u in rede.unidades.values():
         print(f"  {u.url:<24} {u.nome} ({u.nivel})")
-    print(f"\nPágina do cidadão (qualquer nó): {next(iter(rede.unidades.values())).url}/usuario.html")
     print("Ctrl+C para parar todos os nós.\n", flush=True)
     avisados = set()
     try:

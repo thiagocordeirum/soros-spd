@@ -1,6 +1,6 @@
 # Logística distribuída de soros antivenenos
 
-Sistema web para que a secretaria estadual, os polos e os pontos de soro enxerguem o
+Sistema com API HTTP para que a secretaria estadual, os polos e os pontos de soro enxerguem o
 mesmo estoque, registrem atendimentos e recebam alertas de surto, sem depender de um
 servidor central. Projeto da disciplina Sistemas Paralelos e Distribuídos (UEA/EST, 2026).
 
@@ -24,28 +24,22 @@ python -m soro rede         # sobe os 8 nós do exemplo do Amazonas, um processo
 python -m soro exemplo      # em outro terminal: carrega dados de exemplo e cria as contas
 ```
 
-As telas da equipe pedem login. O `exemplo` cria contas de demonstração, todas com a senha
-que está em `SENHA_EXEMPLO`, no arquivo `soro/exemplo.py`. Cada pessoa entra pelo endereço
-da própria unidade:
+As operações da equipe exigem autenticação no nó da própria unidade. O comando
+`exemplo` cria contas de demonstração com a senha definida em `SENHA_EXEMPLO`,
+no arquivo `soro/exemplo.py`.
 
-| Login | Tipo | Entra em |
+| Login | Tipo | Porta do nó |
 |---|---|---|
-| `gestor` | Gestão estadual | http://127.0.0.1:8000 |
+| `gestor` | Gestão estadual | 8000 |
 | `coord.tabatinga`, `coord.tefe` | Coordenação do polo | 8001, 8005 |
 | `prof.<unidade>` (ex.: `prof.atalaia`) | Profissional de saúde | porta da unidade (Atalaia: 8003) |
 
-Numa rede sem nenhuma conta, a tela de login da secretaria pede a criação da primeira conta
-de gestão; as outras são cadastradas na tela Equipe.
+Numa rede sem contas, crie a primeira conta de gestão por `POST /api/usuarios` no nó
+da secretaria. Autentique-se com `POST /api/entrar` e mantenha o cookie de sessão nas
+requisições seguintes. `soro/cliente.py` fornece um cliente HTTP com esse suporte.
 
-Depois abra no navegador:
-
-| Endereço | Unidade | Tela principal |
-|---|---|---|
-| http://127.0.0.1:8000 | FVS-RCP (secretaria estadual) | Painel estadual |
-| http://127.0.0.1:8001 | Polo Tabatinga | Painel do polo |
-| http://127.0.0.1:8003 | Atalaia do Norte (posto) | Estoque e atendimento |
-| qualquer nó + `/usuario.html` | | Onde tem soro (cidadão) |
-| qualquer nó + `/docs` | | documentação interativa da API (Swagger, gerada pelo FastAPI) |
+Cada nó oferece a documentação interativa da API em `/docs` e o esquema em
+`/openapi.json`. Exemplo: http://127.0.0.1:8000/docs.
 
 As portas 8000 a 8007 estão em `redes/amazonas.json`. Ctrl+C no primeiro terminal para
 todos os nós. Os dados ficam em `dados/<unidade>.db` e continuam lá quando a rede sobe
@@ -62,21 +56,15 @@ python3 -m unittest -v                  # testes automatizados
 
 Para testar a falha de um nó com a rede no ar, encerre o processo de um polo
 (`kill <pid>`) e continue registrando atendimentos nos postos. Depois suba o polo de novo
-com `python -m soro no tabatinga` e veja na tela "Rede" os dados se acertarem.
+com `python -m soro no tabatinga` e consulte `/api/sincronizacao` para acompanhar a convergência dos dados.
 
-## Telas
+## API
 
-| Tela | Quem usa | O que faz |
-|---|---|---|
-| Entrar (`login.html`) | equipe | login; na secretaria, criação da primeira conta |
-| Início | toda a equipe | resumo do nó e alertas ativos |
-| Estoque e atendimento (`posto.html`) | profissional do posto ou do polo | lotes com validade, registro de atendimento com baixa no lote que vence antes, confirmação de remessa, pedido de soro, entrada de lote |
-| Painel do polo (`polo.html`) | responsável do polo | sugestão de reposição para cada posto, estoque dos postos contra o alvo, pedidos, remessas a caminho, gráficos de casos, uso e vencimento |
-| Painel estadual (`estado.html`) | secretaria | estoque de cada unidade, uso por mês, gráfico de por quantos meses dura, idade do dado, soro perto de vencer com sugestão de remanejamento, postos críticos, gráficos de uso, atendimentos e vencimento |
-| Equipe (`equipe.html`) | toda a equipe | troca de senha e saída; para gestão e coordenação, cadastro, desativação e lista das contas |
-| Seu perfil (`perfil.html`) | cidadão, opcional | nome, alergias, se já tomou soro, doenças e contato de emergência, guardados só no celular para mostrar à equipe |
-| Onde tem soro (`usuario.html`) | cidadão, no celular, sem login | posto mais rápido de alcançar que tem o soro, com o caminho (barco, voadeira, estrada, avião) no mapa; a pessoa diz onde está pela lista, pelo GPS ou tocando no mapa; pode ser instalada na tela inicial |
-| Rede (`rede.html`) | equipe técnica | vizinhos, última troca, vetor de versões e resumo dos dados |
+Os endpoints cobrem estoque por lote, atendimentos, pedidos, remessas, alertas,
+indicadores, contas e sincronização. A consulta pública de soro fica em
+`GET /api/onde-tem-soro`, sem necessidade de conta. Informe `local` ou `lat` e `lon`,
+e opcionalmente `agravo`; a resposta traz destinos ordenados pelo tempo de viagem,
+o trajeto, o estoque e a idade da informação.
 
 ## O sistema usa alguma API externa?
 
@@ -91,41 +79,17 @@ python -m soro cnes        # grava redes/amazonas.cnes.json
 O código CNES de cada unidade fica no arquivo da rede. Os do exemplo vêm da lista oficial
 de pontos estratégicos de soro do Amazonas (Hospital de Guarnição de Tabatinga, Hospital
 Geral de Benjamin Constant, Hospital Regional de Tefé e outros). Os nós leem o arquivo
-gravado ao subir, então continuam funcionando sem internet. Se o arquivo não existir, as
-telas mostram só o nome da unidade.
+gravado ao subir, então continuam funcionando sem internet. Se o arquivo não existir, a
+API informa só o nome da unidade.
 
 A rota é calculada pelo próprio sistema, com o algoritmo de Dijkstra sobre o mapa
 de localidades e trechos do arquivo da rede. APIs comerciais de rota (Google Maps,
 OpenRouteService e outras) só conhecem estradas e não sabem que na Amazônia o caminho é
 pelo rio, além de exigirem internet.
 
-O botão "Usar minha localização" usa a geolocalização do próprio navegador, que não é um
-serviço externo. A página manda só a latitude e a longitude, e o servidor acha a localidade
-do mapa mais perto. Tocar no mapa faz a mesma coisa. O navegador só libera a localização
-em `localhost` ou em HTTPS; pelo IP da rede local, use a lista ou o toque no mapa.
-
-## No celular
-
-A tela do cidadão é um aplicativo web instalável. Abra `usuario.html` no navegador do
-celular e use "Adicionar à tela inicial". Ela abre como aplicativo e, sem conexão, mostra a
-última busca feita. Para instalar e usar o GPS, o celular precisa acessar o nó por HTTPS
-(por exemplo, por um túnel como o `cloudflared tunnel --url http://127.0.0.1:8000`).
-
-O desenho do mapa usa Leaflet com o fundo do OpenStreetMap, que são gratuitos e não pedem
-chave nem cadastro. É a única coisa que vem de fora: o navegador baixa a biblioteca e as
-imagens do mapa pela internet. A rota continua sendo calculada pelo sistema. Sem internet,
-a tela mostra no lugar um mapa esquemático desenhado a partir das coordenadas cadastradas,
-e a busca funciona do mesmo jeito.
-
-Cada resultado da tela do cidadão tem o botão "Abrir no Google Maps", que é só um link
-(`google.com/maps/dir/?api=1&destination=lat,lon`) com as coordenadas do CNES. Não precisa
-de chave nem de conta. Serve para o último trecho, dentro da cidade, porque o Google Maps
-só traça caminho por estrada. Colocar o mapa do Google dentro da página exigiria chave da
-API do Google com cobrança ativada; por isso o mapa da tela continua com Leaflet e
-OpenStreetMap.
-
-No mapa, cada trecho aparece como uma linha reta entre duas localidades. O tempo de viagem
-é o do cadastro, mas o desenho não acompanha a curva do rio.
+A busca aceita coordenadas e encontra a localidade cadastrada mais próxima,
+informando a distância até ela. O grafo guarda os tempos e meios de transporte dos
+trechos, sem a geometria do percurso dos rios.
 
 ## Estrutura
 
@@ -138,14 +102,12 @@ soro/no.py              regras de negócio de uma unidade
 soro/usuarios.py        tipos de conta, permissões e senha (PBKDF2)
 soro/cliente.py         cliente HTTP com login, usado pelo exemplo, pela avaliação e pelos testes
 soro/sincronizacao.py   troca de dados entre vizinhos (gossip)
-soro/servidor.py        servidor HTTP em FastAPI: API, páginas e sincronização
+soro/servidor.py        servidor HTTP em FastAPI: API e sincronização
 soro/surto.py           detecção de surto (método C2)
 soro/cnes.py            importação dos estabelecimentos pela API do CNES
 soro/rotas.py           rotas e postos críticos em paralelo
 soro/exemplo.py         dados de exemplo
 soro/avaliacao.py       medição das quatro perguntas
-soro/web/               páginas (HTML, CSS e JavaScript; só a tela do cidadão usa Leaflet)
-                        manifest.webmanifest e sw.js tornam a tela do cidadão instalável
 tests/                  testes automatizados
 docs/especificacao.md   especificação de projeto
 ```
