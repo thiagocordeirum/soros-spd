@@ -1,5 +1,16 @@
-# O repositório guarda só o sistema; o resto da pasta (relatórios, protótipos,
-# slides, material da disciplina) fica apenas neste computador.
 /*
 !/.gitignore
+!/AGENTS.md
 !/sistema/
+
+!/packages/
+!/package.json
+!/package-lock.json
+
+**/node_modules/
+**/dist/
+**/.venv/
+**/__pycache__/
+**/*.pyc
+
+!/.agents/
