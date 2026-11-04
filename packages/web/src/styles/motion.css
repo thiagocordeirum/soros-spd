@@ -1,0 +1,112 @@
+:root {
+  --motion-fast: 120ms;
+  --motion-default: 180ms;
+  --motion-popover: 160ms;
+
+  --motion-ease: cubic-bezier(0.2, 0, 0, 1);
+}
+
+@layer components {
+  .button-primary,
+  .button-secondary {
+    transition:
+      background-color var(--motion-fast) var(--motion-ease),
+      border-color var(--motion-fast) var(--motion-ease),
+      color var(--motion-fast) var(--motion-ease),
+      opacity var(--motion-fast) var(--motion-ease),
+      transform var(--motion-fast) var(--motion-ease);
+  }
+
+  .button-primary:not(:disabled):not([aria-disabled="true"]):active,
+  .button-secondary:not(:disabled):not([aria-disabled="true"]):active {
+    transform: translateY(1px);
+  }
+
+  .field {
+    transition:
+      border-color var(--motion-fast) var(--motion-ease),
+      background-color var(--motion-fast) var(--motion-ease);
+  }
+
+  .nav-item {
+    transition:
+      background-color var(--motion-fast) var(--motion-ease),
+      color var(--motion-fast) var(--motion-ease);
+  }
+
+  .text-link {
+    transition:
+      color var(--motion-fast) var(--motion-ease);
+  }
+
+  .data-table tbody tr {
+    transition:
+      background-color var(--motion-fast) var(--motion-ease);
+  }
+}
+
+.page-enter-active {
+  transition:
+    opacity var(--motion-default) var(--motion-ease);
+}
+
+.page-leave-active {
+  transition:
+    opacity var(--motion-fast) var(--motion-ease);
+}
+
+.page-enter-from,
+.page-leave-to {
+  opacity: 0;
+}
+
+.feedback-enter-active,
+.feedback-leave-active {
+  transition:
+    opacity var(--motion-fast) var(--motion-ease);
+}
+
+.feedback-enter-from,
+.feedback-leave-to {
+  opacity: 0;
+}
+
+.popover-enter-active {
+  transition:
+    opacity var(--motion-popover) var(--motion-ease),
+    transform var(--motion-popover) var(--motion-ease);
+}
+
+.popover-leave-active {
+  transition:
+    opacity var(--motion-fast) var(--motion-ease),
+    transform var(--motion-fast) var(--motion-ease);
+}
+
+.popover-enter-from,
+.popover-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-fast: 0ms;
+    --motion-default: 0ms;
+    --motion-popover: 0ms;
+  }
+
+  html {
+    scroll-behavior: auto;
+  }
+
+  .button-primary:not(:disabled):not([aria-disabled="true"]):active,
+  .button-secondary:not(:disabled):not([aria-disabled="true"]):active {
+    transform: none;
+  }
+
+  .popover-enter-from,
+  .popover-leave-to {
+    transform: none;
+  }
+}

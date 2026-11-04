@@ -1,1 +1,171 @@
 @import "tailwindcss";
+
+@theme {
+  --color-river: #2a6f5e;
+  --color-forest: #0d3f34;
+  --color-ink: #111a17;
+  --color-canvas: #f5f7f6;
+  --color-mist: #eaf2ee;
+  --color-muted: #65716b;
+  --color-line: #dce4df;
+
+  --font-sans: "Red Hat Text Variable", Arial, sans-serif;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    margin: 0;
+    min-width: 320px;
+    background: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  button,
+  input,
+  select {
+    font: inherit;
+  }
+
+  button,
+  select {
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+  }
+
+  :where(a, button, input, select):focus-visible {
+    outline: 2px solid var(--color-river);
+    outline-offset: 4px;
+  }
+
+  ::selection {
+    background: var(--color-river);
+    color: white;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-river) var(--color-canvas)
+  }
+
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: var(--color-canvas);
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: var(--color-river);
+    border: 2px solid var(--color-canvas);
+    border-radius: 999px;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background: var(--color-forest)
+  }
+
+  *::-webkit-scrollbar-corner {
+    background: var(--color-canvas)
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+  }
+}
+
+@layer components {
+  .page-title {
+    @apply text-2xl font-semibold tracking-tight sm:text-3xl;
+  }
+
+  .page-description {
+    @apply mt-2 max-w-3xl text-sm leading-7 text-muted;
+  }
+
+  .panel {
+    @apply min-w-0 overflow-hidden rounded-xl border border-line bg-white;
+  }
+
+  .field-label {
+    @apply mb-2 block text-xs font-medium text-muted;
+  }
+
+  .field {
+    @apply w-full rounded-lg border border-line bg-white
+           px-3 py-2.5 text-sm text-ink placeholder:text-muted;
+  }
+
+  .field:focus {
+    outline: none,
+    border-color: var(--color-forest)
+  }
+
+  .button-primary {
+    @apply inline-flex items-center justify-center rounded-lg
+           bg-river px-4 py-3 text-sm font-semibold text-white
+           hover:bg-forest;
+  }
+
+  .button-secondary {
+    @apply inline-flex items-center justify-center rounded-lg
+           border border-line bg-white px-4 py-2.5 text-sm
+           font-medium text-river hover:bg-mist;
+  }
+
+  .text-link {
+    @apply rounded text-sm font-semibold text-river underline-offset-4
+           hover:underline;
+  }
+
+  .table-container {
+    @apply overflow-x-auto;
+  }
+
+  .data-table {
+    @apply w-full min-w-160 text-left text-sm;
+  }
+
+  .data-table thead {
+    @apply border-y border-line bg-canvas text-xs text-muted;
+  }
+
+  .data-table thead th {
+    @apply px-5 py-3 font-medium;
+  }
+
+  .data-table tbody tr {
+    @apply border-b border-line last:border-b-0 hover:bg-canvas;
+  }
+
+  .data-table tbody th,
+  .data-table tbody td {
+    @apply px-5 py-5 align-middle;
+  }
+
+  .data-table tbody th {
+    @apply font-normal;
+  }
+
+  .data-table .empty-state,
+  .empty-state {
+    @apply px-5 py-10 text-center text-sm text-muted;
+  }
+
+  .skip-link {
+    @apply sr-only fixed top-3 left-3 z-50 rounded-lg bg-forest
+           px-4 py-3 text-white focus:not-sr-only;
+  }
+}
