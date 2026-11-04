@@ -1,5 +1,6 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
-import { useAutenticacao } from '../hooks/useAuthentication.ts'
+
+import { useAutenticacao } from '../hooks/useAuthentication'
 
 export const router = createRouter({
   history: createWebHashHistory(import.meta.env.BASE_URL),
@@ -10,10 +11,6 @@ export const router = createRouter({
 
   routes: [
     {
-      path: '/',
-      redirect: '/entrada',
-    },
-    {
       path: '/entrada',
       name: 'entrada',
       component: () => import('../pages/EntradaPagina.vue'),
@@ -22,13 +19,25 @@ export const router = createRouter({
       },
     },
     {
-      path: '/painel',
-      name: 'painel',
-      component: () => import('../pages/PainelPagina.vue'),
+      path: '/',
+      component: () => import('../layout/GestaoLayout.vue'),
       meta: {
-        titulo: 'Painel',
         exigeAutenticacao: true,
       },
+      children: [
+        {
+          path: '',
+          redirect: '/painel',
+        },
+        {
+          path: 'painel',
+          name: 'painel',
+          component: () => import('../pages/PainelPagina.vue'),
+          meta: {
+            titulo: 'Visão geral',
+          },
+        },
+      ],
     },
     {
       path: '/:pathMatch(.*)*',
@@ -50,7 +59,9 @@ router.beforeEach(async (to) => {
     if (!sessao.usuario) {
       return {
         name: 'entrada',
-        query: { motivo: 'sessao' },
+        query: {
+          motivo: 'sessao',
+        },
       }
     }
 
@@ -58,7 +69,9 @@ router.beforeEach(async (to) => {
   } catch {
     return {
       name: 'entrada',
-      query: { motivo: 'conexao' },
+      query: {
+        motivo: 'conexao',
+      },
     }
   }
 })
